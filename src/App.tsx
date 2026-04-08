@@ -1434,7 +1434,7 @@ function App() {
             onClose={() => setIsCloudExplorerOpen(false)}
             onImport={async (name, files) => {
               // 1. Spara nuvarande jobb
-              await handleSave();
+              await saveCurrentFile();
               // 2. Töm arbetsytan för en 'Clean Slate'
               setDirectoryHandle(null);
               setFileEntries([]);

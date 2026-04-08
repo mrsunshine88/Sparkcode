@@ -40,6 +40,7 @@ export const lintHTML = (code: string): LintResult[] => {
   let lastHeaderLevel = 0;
   let divCount = 0;
   let hasMain = false;
+  let match: RegExpExecArray | null;
 
   for (let i = 0; i < lines.length; i++) {
     const lineContent = lines[i];
