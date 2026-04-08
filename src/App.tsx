@@ -1447,6 +1447,10 @@ function App() {
               
               addLog('SUCCESS', `Projektet "${repoName}" är nu klart och sparat på din dator!`);
             } catch (err) {
+              console.error('Kunde inte spara till disk:', err);
+              addLog('ERROR', 'Ett fel uppstod när filer skrevs till disk.');
+            }
+          }
           setSyncStatus('synced');
         }}
       />
