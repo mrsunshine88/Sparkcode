@@ -76,7 +76,6 @@ function App() {
   const [isDiffMode, setIsDiffMode] = useState(false);
   const [isVimMode, setIsVimMode] = useState(false);
   const [savedCode, setSavedCode] = useState<string>('');
-  const [cloudSyncedCode, setCloudSyncedCode] = useState<string>('');
   const [projectToRestore, setProjectToRestore] = useState<ProjectMetadata | null>(null);
 
   // Learn from Scratch state
@@ -163,6 +162,13 @@ function App() {
       }
     });
   }, []);
+
+  // LocalStorage Backup: Spara en blixtsnabb kopia i webbläsarens minne (F5-skydd)
+  useEffect(() => {
+    if (activeFileName && code && lastChangeSource === 'local') {
+      localStorage.setItem(`sparkcode_backup_${activeFileName}`, code);
+    }
+  }, [code, activeFileName, lastChangeSource]);
 
   // Registrera Service Worker för PWA
   useEffect(() => {
@@ -270,16 +276,15 @@ function App() {
     }
   }, [session]);
 
-  // Moln-synk: Skicka ändringar till molnet (Dual-Shield: Moln-skölden)
+  // Moln-synk: Skicka ändringar till molnet (Ultra-Lightweight)
   useEffect(() => {
     if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
-      // Om koden redan matchar molnet, skicka inget (Stoppar Eko)
-      if (code === cloudSyncedCode) return;
+      // Om koden redan matchar molnet/disk-staten, skicka inget (Stoppar Eko)
+      if (code === savedCode) return;
       
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
-          // Spara i molnet
           await cloudSyncService.sendBroadcast(currentProject.name, {
             project_name: currentProject.name,
             file_path: activeFileName,
@@ -288,7 +293,7 @@ function App() {
           });
 
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
-          setCloudSyncedCode(code); // Uppdatera moln-spärren efter lyckad push
+          setSavedCode(code); // Uppdatera lokala spärren
           setSyncStatus('synced');
           setTimeout(() => setSyncStatus('idle'), 2000);
         } catch (err) {
@@ -300,7 +305,7 @@ function App() {
 
       return () => clearTimeout(syncTimeout);
     }
-  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, cloudSyncedCode]);
+  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, savedCode]);
 
   // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
   useEffect(() => {
@@ -313,8 +318,11 @@ function App() {
             fileEntries,
             (path, content) => {
               if (activeFileName === path && code !== content) {
-                setCode(content);
-                setCloudSyncedCode(content); // Moln-sköld: Vi är i synk nu
+                // Kolla efter färskare backup i LocalStorage vid start
+                const backup = localStorage.getItem(`sparkcode_backup_${path}`);
+                const finalContent = backup || content;
+                setCode(finalContent);
+                setSavedCode(finalContent);
               }
             }
           );
@@ -334,15 +342,11 @@ function App() {
                 currentProject.name,
                 session.user.id,
                 async (cloudFile) => {
-                  // BLIXTSNABB SYNK (DUAL-SHIELD): För aktiv fil uppdaterar vi bara state ögonblickligen.
+                  // NO-WEIGHT SYNC: För aktiv fil uppdaterar vi bara state ögonblickligen.
                   if (activeFileName === cloudFile.file_path) {
                     setLastChangeSource('remote');
-                    setCloudSyncedCode(cloudFile.content); // Moln-skölden stoppar ekot här
+                    setSavedCode(cloudFile.content); // Muta eko omedelbart
                     setCode(cloudFile.content); // Skärmen uppdateras direkt
-                    
-                    // OBS: Vi uppdaterar INTE savedCode här. 
-                    // Detta gör att Auto-Save timern upptäcker att filen behöver sparas till disk 
-                    // i bakgrunden utan att störa den blixtsnabba moln-synken.
                   }
                   
                   // Uppdatera virtuella fileEntries i bakgrunden
