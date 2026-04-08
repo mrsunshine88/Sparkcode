@@ -373,7 +373,7 @@ function App() {
         subscription.unsubscribe();
       };
     }
-  }, [session, currentProject?.id, isCloudSyncEnabled]); // VIKTIGT: Får inte bero på fileEntries eller code!
+  }, [session, currentProject?.id, isCloudSyncEnabled, activeFileName]); // Nu med activeFileName så vi inte tappar fokus!
 
   // MOBIL TURBO-SYNK: Hjärtslag och Wake-Lock för att förhindra throttling
   useEffect(() => {
