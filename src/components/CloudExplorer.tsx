@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 interface CloudExplorerProps {
   initialTab?: 'MOLN' | 'GITHUB';
   onClose: () => void;
-  onImport: (projectName: string, files: {path: string, content: string}[]) => void;
+  onImport: (projectName: string, files: {path: string, content: string | Blob}[]) => void;
 }
 
 export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN', onClose, onImport }) => {

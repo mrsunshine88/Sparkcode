@@ -54,7 +54,7 @@ export const readFileContent = async (fileHandle: FileSystemFileHandle): Promise
 /**
  * Sparar innehåll till en fil.
  */
-export const writeFileContent = async (fileHandle: FileSystemFileHandle, content: string): Promise<void> => {
+export const writeFileContent = async (fileHandle: FileSystemFileHandle, content: string | Blob): Promise<void> => {
   const writable = await (fileHandle as any).createWritable();
   await writable.write(content);
   await writable.close();
@@ -65,4 +65,11 @@ export const writeFileContent = async (fileHandle: FileSystemFileHandle, content
  */
 export const createNewFile = async (directoryHandle: FileSystemDirectoryHandle, fileName: string): Promise<FileSystemFileHandle> => {
   return await directoryHandle.getFileHandle(fileName, { create: true });
+};
+
+/**
+ * Skapar en ny mapp i en specifik mapp.
+ */
+export const createNewFolder = async (directoryHandle: FileSystemDirectoryHandle, folderName: string): Promise<FileSystemDirectoryHandle> => {
+  return await directoryHandle.getDirectoryHandle(folderName, { create: true });
 };

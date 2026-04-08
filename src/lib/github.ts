@@ -7,12 +7,15 @@ export interface GitHubRepo {
   html_url: string;
 }
 
+export interface GitHubFile {
+  path: string;
+  content: string | Blob;
+  isBinary: boolean;
+}
+
 export class GitHubService {
   private octokit: Octokit | null = null;
 
-  /**
-   * Initierar Octokit med provider_token från Supabase-sessionen.
-   */
   async init(): Promise<boolean> {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.provider_token;
@@ -26,9 +29,6 @@ export class GitHubService {
     return true;
   }
 
-  /**
-   * Hämtar användarens publika repon.
-   */
   async listRepos(): Promise<GitHubRepo[]> {
     if (!this.octokit) await this.init();
     if (!this.octokit) return [];
@@ -45,62 +45,7 @@ export class GitHubService {
     }));
   }
 
-  /**
-   * Skapar ett nytt repo.
-   */
-  async createRepo(name: string): Promise<GitHubRepo> {
-    if (!this.octokit) await this.init();
-    if (!this.octokit) throw new Error('GitHub not initialized');
-
-    const { data } = await this.octokit.rest.repos.createForAuthenticatedUser({
-      name,
-      auto_init: true,
-      private: false,
-    });
-
-    return {
-      name: data.name,
-      full_name: data.full_name,
-      html_url: data.html_url,
-    };
-  }
-
-  /**
-   * Laddar upp en fil till ett repo.
-   */
-  async uploadFile(owner: string, repo: string, path: string, content: string, message: string): Promise<void> {
-    if (!this.octokit) await this.init();
-    if (!this.octokit) throw new Error('GitHub not initialized');
-
-    // Kolla om filen redan finns för att få dess SHA (krävs för uppdatering)
-    let sha: string | undefined;
-    try {
-      const { data } = await this.octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path,
-      });
-      if (!Array.isArray(data)) {
-        sha = data.sha;
-      }
-    } catch (e) {
-      // Filen finns inte än, det är okej
-    }
-
-    await this.octokit.rest.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path,
-      message,
-      content: btoa(unescape(encodeURIComponent(content))), // Base64 encoding som hanterar UTF-8
-      sha,
-    });
-  }
-
-  /**
-   * Hämtar rekursivt allt innehåll i ett repo.
-   */
-  async fetchRepoContents(owner: string, repo: string, path: string = ''): Promise<{path: string, content: string}[]> {
+  async fetchRepoContents(owner: string, repo: string, path: string = ''): Promise<GitHubFile[]> {
     if (!this.octokit) await this.init();
     if (!this.octokit) throw new Error('GitHub not initialized');
 
@@ -110,13 +55,17 @@ export class GitHubService {
       path,
     });
 
-    const files: {path: string, content: string}[] = [];
+    const files: GitHubFile[] = [];
 
     if (Array.isArray(data)) {
       for (const item of data) {
         if (item.type === 'file') {
-          const content = await this.fetchFileContent(item.url);
-          files.push({ path: item.path, content });
+          try {
+            const fileData = await this.fetchFile(item.url, item.name);
+            files.push(fileData);
+          } catch (err) {
+            console.error(`Skipping file ${item.path} due to error:`, err);
+          }
         } else if (item.type === 'dir') {
           const subFiles = await this.fetchRepoContents(owner, repo, item.path);
           files.push(...subFiles);
@@ -127,24 +76,90 @@ export class GitHubService {
     return files;
   }
 
-  private async fetchFileContent(url: string): Promise<string> {
+  private async fetchFile(url: string, fileName: string): Promise<GitHubFile> {
     if (!this.octokit) throw new Error('GitHub not initialized');
     
-    // Använd Octokit.request istället för manuell fetch för att hantera auth korrekt
     const response = await this.octokit.request(`GET ${url}`);
-    const data = response.data;
+    const b64Content = response.data.content?.replace(/\s/g, '') || '';
     
-    if (!data.content) {
-      throw new Error(`Kunde inte hämta innehåll från: ${url}`);
+    if (!b64Content) {
+      throw new Error(`Inget innehåll i: ${fileName}`);
     }
 
-    // Robust Base64-avkodning som hanterar UTF-8 och svenska tecken
-    return decodeURIComponent(
-      atob(data.content.replace(/\s/g, ''))
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
+    // Kolla om det är en bild/binär fil baserat på filändelsen
+    const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp'];
+    const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+
+    if (isBinary) {
+      // Hantera som binär Blob
+      const binaryString = atob(b64Content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const mimeType = this.getMimeType(fileName);
+      return {
+        path: response.data.path,
+        content: new Blob([bytes], { type: mimeType }),
+        isBinary: true
+      };
+    } else {
+      // Hantera som UTF-8 text (Robust metod med TextDecoder som fixar URI-fel)
+      try {
+        const binaryString = atob(b64Content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const text = new TextDecoder('utf-8').decode(bytes);
+        return {
+          path: response.data.path,
+          content: text,
+          isBinary: false
+        };
+      } catch (err) {
+        console.warn(`TextDecoder misslyckades för ${fileName}, returnerar rå-sträng.`, err);
+        return {
+          path: response.data.path,
+          content: atob(b64Content),
+          isBinary: false
+        };
+      }
+    }
+  }
+
+  private getMimeType(fileName: string): string {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'png': return 'image/png';
+      case 'jpg':
+      case 'jpeg': return 'image/jpeg';
+      case 'gif': return 'image/gif';
+      case 'svg': return 'image/svg+xml';
+      case 'webp': return 'image/webp';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  async uploadFile(owner: string, repo: string, path: string, content: string, message: string): Promise<void> {
+    if (!this.octokit) await this.init();
+    if (!this.octokit) throw new Error('GitHub not initialized');
+
+    let sha: string | undefined;
+    try {
+      const { data } = await this.octokit.rest.repos.getContent({ owner, repo, path });
+      if (!Array.isArray(data)) sha = data.sha;
+    } catch (e) {}
+
+    await this.octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path,
+      message,
+      // Hantera UTF-8 vid uppladdning med unescape-hacket för btoa
+      content: btoa(unescape(encodeURIComponent(content))),
+      sha,
+    });
   }
 }
 
