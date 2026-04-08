@@ -307,7 +307,7 @@ function App() {
     }
   }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, savedCode]);
 
-  // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
+  // 1. Initial Auto-Pull (Körs bara EN gång när projektet öppnas)
   useEffect(() => {
     if (session && currentProject && fileEntries.length > 0) {
       const performAutoPull = async () => {
@@ -318,7 +318,6 @@ function App() {
             fileEntries,
             (path, content) => {
               if (activeFileName === path && code !== content) {
-                // Kolla efter färskare backup i LocalStorage vid start
                 const backup = localStorage.getItem(`sparkcode_backup_${path}`);
                 const finalContent = backup || content;
                 setCode(finalContent);
@@ -328,64 +327,53 @@ function App() {
           );
           setSyncStatus('synced');
           addLog('SUCCESS', 'Initial molnsynk slutförd.');
+          setTimeout(() => setSyncStatus('idle'), 2000);
         } catch (err) {
-            console.error('Auto-Pull Error:', err);
-            setSyncStatus('error');
+          console.error('Auto-Pull Error:', err);
+          setSyncStatus('error');
         }
       };
-      
       performAutoPull();
+    }
+  }, [session, currentProject?.id]); // VIKTIGT: Endast vid projekt-ID ändring
 
-            // TRUE GHOST SYNC: Aktivera realtids-prenumeration
-            if (isCloudSyncEnabled) {
-              const subscription = cloudSyncService.subscribeToProject(
-                currentProject.name,
-                session.user.id,
-                async (cloudFile) => {
-                  // NO-WEIGHT SYNC: För aktiv fil uppdaterar vi bara state ögonblickligen.
-                  if (activeFileName === cloudFile.file_path) {
-                    setLastChangeSource('remote');
-                    setSavedCode(cloudFile.content); // Muta eko omedelbart
-                    setCode(cloudFile.content); // Skärmen uppdateras direkt
-                  }
-                  
-                  // Uppdatera virtuella fileEntries i bakgrunden
-                  setFileEntries(prev => prev.map(e => {
-                    if (e.name === cloudFile.file_path) {
-                      return {
-                        ...e,
-                        handle: {
-                          ...e.handle,
-                          getFile: async () => ({
-                            text: async () => cloudFile.content
-                          })
-                        } as any
-                      };
-                    }
-                    return e;
-                  }));
-
-                  // Allt annat (disk-skrivning av bakgrundsfiler) sker asynkront
-                  if (activeFileName !== cloudFile.file_path && directoryHandle) {
-                    cloudSyncService.syncCloudToLocal(
-                      currentProject.name,
-                      fileEntries,
-                      () => {},
-                      cloudFile
-                    );
-                  }
-                  
-                  setSyncStatus('synced');
-                  addLog('SUCCESS', `Flash Sync: ${cloudFile.file_path} uppdaterad.`);
-                }
-              );
-      
-              return () => {
-                subscription.unsubscribe();
+  // 2. Realtids-synk (GHOST SYNC)
+  useEffect(() => {
+    if (session && currentProject && isCloudSyncEnabled) {
+      const subscription = cloudSyncService.subscribeToProject(
+        currentProject.name,
+        session.user.id,
+        async (cloudFile) => {
+          // BLIXTSNABB UPDATE (UI-PRIO)
+          if (activeFileName === cloudFile.file_path) {
+            setLastChangeSource('remote');
+            setSavedCode(cloudFile.content);
+            setCode(cloudFile.content);
+          }
+          
+          // Uppdatera virtuell lista i bakgrunden (Utan att trigga om synken)
+          setFileEntries(prev => prev.map(e => {
+            if (e.name === cloudFile.file_path) {
+              return {
+                ...e,
+                handle: {
+                  ...e.handle,
+                  getFile: async () => ({
+                    text: async () => cloudFile.content
+                  })
+                } as any
               };
             }
+            return e;
+          }));
+        }
+      );
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
-  }, [session, currentProject?.id, isCloudSyncEnabled]); // Körs när projektet, sessionen eller synk-inställningen ändras
+  }, [session, currentProject?.id, isCloudSyncEnabled]); // VIKTIGT: Får inte bero på fileEntries eller code!
 
   // MOBIL TURBO-SYNK: Hjärtslag och Wake-Lock för att förhindra throttling
   useEffect(() => {
