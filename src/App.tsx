@@ -113,8 +113,7 @@ function App() {
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
   const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
-  const lastLocalChangeTimeRef = useRef<number>(0);
-  const remoteSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isRemoteSyncingRef = useRef<boolean>(false);
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -281,13 +280,12 @@ function App() {
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
-          // DUBBEL-SÄNDNING: Skicka broadcast för hastighet, databas för lagring
+          // Spara i molnet (Anti-Eko Skydd: Vi skickar bara om vi inte nyss tog emot)
           await cloudSyncService.sendBroadcast(currentProject.name, {
             project_name: currentProject.name,
             file_path: activeFileName,
             content: code,
-            user_id: session.user.id,
-            timestamp: Date.now() // Lägg till tidsstämpel för Anti-Eko 3.0
+            user_id: session.user.id
           });
 
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
@@ -333,30 +331,15 @@ function App() {
                 currentProject.name,
                 session.user.id,
                 async (cloudFile) => {
-                  // ANTI-EKO 3.0: Om fjärr-meddelandet är äldre än vår senaste lokala ändring, ignorera det
-                  // (Detta händer om vi skriver snabbare än nätverket hinner med)
-                  const remoteTimestamp = (cloudFile as any).timestamp || 0;
-                  if (remoteTimestamp > 0 && remoteTimestamp < lastLocalChangeTimeRef.current) {
-                    console.log('🛡 Anti-Eko 3.0: Ignorerar gammalt fjärr-meddelande.');
-                    return;
-                  }
-
-                  // UI-ONLY SYNC: För aktiv fil uppdaterar vi bara state ögonblickligen.
+                  // BLIXTSNABB SYNK: För aktiv fil uppdaterar vi bara state ögonblickligen.
                   if (activeFileName === cloudFile.file_path) {
-                    // Vi sätter savedCode FÖRST för att blockera den lokala pushen omedelbart
-                    setSavedCode(cloudFile.content);
-                    setCode(cloudFile.content);
+                    isRemoteSyncingRef.current = true;
                     setLastChangeSource('remote');
-
-                    // DEBOUNCED DISK WRITE: Förhindra frysningar genom att samla ihop ändringar i 500ms
-                    if (activeFileHandle) {
-                      if (remoteSaveTimeoutRef.current) clearTimeout(remoteSaveTimeoutRef.current);
-                      remoteSaveTimeoutRef.current = setTimeout(() => {
-                        writeFileContent(activeFileHandle, cloudFile.content).catch(err => {
-                          console.error('Blixt-synk: Kunde inte skriva till disk:', err);
-                        });
-                      }, 500); // Vänta 0.5s för att spara datorns processor
-                    }
+                    setCode(cloudFile.content);
+                    // OBS: Vi uppdaterar INTE savedCode här. 
+                    // Detta gör att Auto-Save timern upptäcker att filen behöver sparas till disk 
+                    // 1 sekund senare, men lastChangeSource stoppar loopen till molnet.
+                    setTimeout(() => isRemoteSyncingRef.current = false, 100);
                   }
                   
                   // Uppdatera virtuella fileEntries i bakgrunden
@@ -1353,7 +1336,6 @@ function App() {
                   isVimMode={isVimMode}
                   onChange={(val) => {
                     if (val !== undefined) {
-                      lastLocalChangeTimeRef.current = Date.now();
                       setLastChangeSource('local');
                       setCode(val);
                     }
