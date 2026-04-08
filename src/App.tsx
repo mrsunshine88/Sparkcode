@@ -114,6 +114,7 @@ function App() {
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
   const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
   const lastLocalChangeTimeRef = useRef<number>(0);
+  const remoteSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -347,12 +348,14 @@ function App() {
                     setCode(cloudFile.content);
                     setLastChangeSource('remote');
 
-                    // FORCE DISK WRITE: Om vi är på datorn (har en handle), skriv till disken nu!
-                    // Detta sker asynkront så det segar inte ner UI:t.
+                    // DEBOUNCED DISK WRITE: Förhindra frysningar genom att samla ihop ändringar i 500ms
                     if (activeFileHandle) {
-                      writeFileContent(activeFileHandle, cloudFile.content).catch(err => {
-                        console.error('Blixt-synk: Kunde inte skriva till disk:', err);
-                      });
+                      if (remoteSaveTimeoutRef.current) clearTimeout(remoteSaveTimeoutRef.current);
+                      remoteSaveTimeoutRef.current = setTimeout(() => {
+                        writeFileContent(activeFileHandle, cloudFile.content).catch(err => {
+                          console.error('Blixt-synk: Kunde inte skriva till disk:', err);
+                        });
+                      }, 500); // Vänta 0.5s för att spara datorns processor
                     }
                   }
                   
