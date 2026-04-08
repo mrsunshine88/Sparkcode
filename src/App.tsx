@@ -188,30 +188,42 @@ function App() {
   const qualityScore = calculateQuality();
   const topError = errors[0];
 
+  // Central spara-funktion
+  const saveCurrentFile = async () => {
+    if (activeFileHandle && code !== savedCode) {
+      try {
+        await writeFileContent(activeFileHandle, code);
+        setSavedCode(code);
+        
+        // Uppdatera Blobs
+        await blobManager.refreshBlobs(fileEntries);
+        setPreviewVersion(v => v + 1);
+        
+        // Uppdatera funktioner för Deep-Linting
+        updateAvailableFunctions();
+        
+        // Historik-snapshot
+        const snapshot: CodeSnapshot = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          fileName: activeFileName,
+          code: code
+        };
+        setHistory(prev => [snapshot, ...prev].slice(0, 50));
+        return true;
+      } catch (err) {
+        console.error('Kunde inte spara filen:', err);
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Auto-save till lokala filen om vald (Spara alltid, även om ogiltig kod - för att förhindra dataförlust)
   useEffect(() => {
     if (activeFileHandle) {
       const saveTimeout = setTimeout(() => {
-        writeFileContent(activeFileHandle, code)
-          .then(async () => {
-            setSavedCode(code); // Markera som sparad
-            // Uppdatera Blobs för projektet så att Preview hänger med
-            await blobManager.refreshBlobs(fileEntries);
-            setPreviewVersion(v => v + 1);
-            
-            // Uppdatera tillgängliga funktioner för Deep-Linting
-            updateAvailableFunctions();
-
-            // Spara historik-snapshot (max 50)
-            const snapshot: CodeSnapshot = {
-              id: Math.random().toString(36).substring(2, 9),
-              timestamp: Date.now(),
-              fileName: activeFileName,
-              code: code
-            };
-            setHistory(prev => [snapshot, ...prev].slice(0, 50));
-          })
-          .catch(console.error);
+        saveCurrentFile();
       }, 1000);
       return () => clearTimeout(saveTimeout);
     }
@@ -458,8 +470,7 @@ function App() {
       // FORCE SAVE: Om vi byter fil och har osparad kod, spara den gamla filen NU
       if (activeFileHandle && code !== savedCode) {
         setSyncStatus('syncing');
-        await writeFileContent(activeFileHandle, code);
-        setSavedCode(code);
+        await saveCurrentFile();
         setSyncStatus('synced');
       }
 
