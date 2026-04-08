@@ -96,6 +96,46 @@ export class GitHubService {
       sha,
     });
   }
+
+  /**
+   * Hämtar rekursivt allt innehåll i ett repo.
+   */
+  async fetchRepoContents(owner: string, repo: string, path: string = ''): Promise<{path: string, content: string}[]> {
+    if (!this.octokit) await this.init();
+    if (!this.octokit) throw new Error('GitHub not initialized');
+
+    const { data } = await this.octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+    });
+
+    const files: {path: string, content: string}[] = [];
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (item.type === 'file') {
+          const content = await this.fetchFileContent(item.url);
+          files.push({ path: item.path, content });
+        } else if (item.type === 'dir') {
+          const subFiles = await this.fetchRepoContents(owner, repo, item.path);
+          files.push(...subFiles);
+        }
+      }
+    }
+
+    return files;
+  }
+
+  private async fetchFileContent(url: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `token ${this.octokit?.auth}`
+      }
+    });
+    const data = await response.json();
+    return decodeURIComponent(escape(atob(data.content.replace(/\n/g, ''))));
+  }
 }
 
 export const githubService = new GitHubService();

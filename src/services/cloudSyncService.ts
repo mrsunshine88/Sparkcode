@@ -83,5 +83,37 @@ export const cloudSyncService = {
         onFileUpdated(cloudFile.file_path, cloudFile.content);
       }
     }
+  },
+
+  /**
+   * Hämtar en lista på alla projekt som användaren har i molnet.
+   */
+  async listProjects() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return [];
+
+    const { data, error } = await supabase
+      .from('file_sync')
+      .select('project_name, updated_at')
+      .eq('user_id', session.user.id)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('CloudSync List Error:', error);
+      return [];
+    }
+
+    // Unifiera till unika projektnamn med senaste datumet
+    const projectsMap = new Map<string, string>();
+    data.forEach(item => {
+      if (!projectsMap.has(item.project_name) || new Date(item.updated_at) > new Date(projectsMap.get(item.project_name)!)) {
+        projectsMap.set(item.project_name, item.updated_at);
+      }
+    });
+
+    return Array.from(projectsMap.entries()).map(([name, date]) => ({
+      name,
+      updated_at: date
+    }));
   }
 };

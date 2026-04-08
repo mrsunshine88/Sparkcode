@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, 
-  GitBranch, PlusSquare, History as HistoryIcon, X, Info
+  GitBranch, PlusSquare, History as HistoryIcon, X, Info, Globe, Settings, Lock, Download
 } from 'lucide-react';
 import CodeEditor from './components/Editor';
 import Preview from './components/Preview';
@@ -34,6 +34,9 @@ import * as prettierHtml from 'prettier/parser-html';
 import * as prettierPostcss from 'prettier/parser-postcss';
 import * as prettierBabel from 'prettier/parser-babel';
 import { cloudSyncService } from './services/cloudSyncService';
+import { CloudExplorer } from './components/CloudExplorer';
+import { AccountSettings } from './components/AccountSettings';
+import { AnimatePresence } from 'framer-motion';
 import './App.css';
 
 function App() {
@@ -86,6 +89,13 @@ function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAiBarVisible, setIsAiBarVisible] = useState(true);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [isCloudExplorerOpen, setIsCloudExplorerOpen] = useState(false);
+  const [cloudExplorerInitialTab, setCloudExplorerInitialTab] = useState<'MOLN' | 'GITHUB'>('MOLN');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isVirtualMode, setIsVirtualMode] = useState(false);
+  const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(() => {
+    return localStorage.getItem('sparkcode_cloud_sync_enabled') !== 'false';
+  });
   
   // Hjälpfunktion för att lägga till loggar
   const addLog = (type: 'SYSTEM' | 'ERROR' | 'WARNING', content: string) => {
@@ -202,9 +212,8 @@ function App() {
     }
   }, [code, activeFileHandle, isValid, fileEntries]);
 
-  // Helautomatisk Cloud Sync (Auto-Push)
   useEffect(() => {
-    if (session && currentProject && activeFileName && code.trim()) {
+    if (session && currentProject && activeFileName && code.trim() && isCloudSyncEnabled) {
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
@@ -216,8 +225,10 @@ function App() {
         }
       }, 2000); // Tyst auto-push efter 2 sekunder
       return () => clearTimeout(syncTimeout);
+    } else if (!isCloudSyncEnabled) {
+      setSyncStatus('idle');
     }
-  }, [code, activeFileName, currentProject, session]);
+  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled]);
 
   // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
   useEffect(() => {
@@ -573,13 +584,29 @@ function App() {
 
   const menuItems = [
     { 
-      label: 'Öppna mapp...', 
+      label: 'ÖPPNA MAPP...', 
       icon: <FolderOpen size={14} />, 
       shortcut: 'Ctrl+O',
       onClick: handleConnectDirectory 
     },
+    {
+      label: 'ÖPPNA FRÅN MOLNET',
+      icon: <Globe size={14} />,
+      onClick: () => {
+        setCloudExplorerInitialTab('MOLN');
+        setIsCloudExplorerOpen(true);
+      }
+    },
+    {
+      label: 'HÄMTA FRÅN GITHUB',
+      icon: <GitBranch size={14} />,
+      onClick: () => {
+        setCloudExplorerInitialTab('GITHUB');
+        setIsCloudExplorerOpen(true);
+      }
+    },
     { 
-      label: 'Nytt projekt', 
+      label: 'NYTT PROJEKT', 
       icon: <PlusSquare size={14} />, 
       onClick: async () => {
         setDirectoryHandle(null);
@@ -589,21 +616,34 @@ function App() {
       }
     },
     {
-      label: 'Senaste projekt',
+      label: 'SENASTE PROJEKT',
       icon: <HistoryIcon size={14} />,
       children: recentProjects.length > 0 
         ? recentProjects.map(p => ({
-            label: p.name,
+            label: p.name.toUpperCase(),
+            icon: <FolderOpen size={12} />,
             onClick: () => handleSwitchProject(p)
           }))
-        : [{ label: 'Inga sparade projekt', onClick: () => {} }]
+        : [{ label: 'INGA SPARADE PROJEKT', icon: <Info size={12} />, onClick: () => {} }]
     },
     {
-      label: 'Döp om projekt',
+      label: 'DÖP OM PROJEKT',
+      icon: <Terminal size={14} />,
       onClick: handleRenameProject
     },
+    {
+      label: `AUTO-MOLNSYNK: ${isCloudSyncEnabled ? 'PÅ' : 'AV'}`,
+      icon: <Zap size={14} color={isCloudSyncEnabled ? 'var(--accent-primary)' : 'gray'} />,
+      onClick: () => {
+        const newValue = !isCloudSyncEnabled;
+        setIsCloudSyncEnabled(newValue);
+        localStorage.setItem('sparkcode_cloud_sync_enabled', String(newValue));
+        addLog('SYSTEM', `Auto-molnsynk är nu ${newValue ? 'aktiverad' : 'avstängd'}.`);
+      }
+    },
     { 
-      label: 'Spara', 
+      label: 'SPARA PROJEKT', 
+      icon: <Lock size={14} />,
       shortcut: 'Ctrl+S', 
       onClick: () => {
         setPushStatus('SYSTEM_SAVE_SUCCESS');
@@ -611,22 +651,23 @@ function App() {
       } 
     },
     {
-      label: 'Format Kod (Prettier)',
+      label: 'FORMATERA KOD (PRETTIER)',
       icon: <Info size={14} />,
       onClick: handlePrettify
     },
     {
-      label: `Vim-läge: ${isVimMode ? 'PÅ' : 'AV'}`,
+      label: `VIM-LÄGE: ${isVimMode ? 'PÅ' : 'AV'}`,
       icon: <Terminal size={14} />,
       onClick: () => setIsVimMode(!isVimMode)
     },
     { 
-      label: 'RUN AUDIT (DJUPANALYS)', 
+      label: 'DJUPANALYS (AUDIT)', 
       icon: <Zap size={14} />,
       onClick: handleRunAudit 
     },
     { 
-      label: 'EXPORTERA PROJEKT (ZIP)', 
+      label: 'EXPORTERA (ZIP)', 
+      icon: <Download size={14} />,
       onClick: () => {
         if (currentProject) {
           exportProjectToZip(fileEntries, currentProject.name);
@@ -636,7 +677,29 @@ function App() {
         }
       } 
     },
-    { label: 'LOGGA UT', onClick: handleLogout }
+    {
+      label: 'PUBLICERA DIGITALT',
+      icon: <Link size={14} />,
+      onClick: () => {
+        if (currentProject) {
+          addLog('SYSTEM', `Publicerar "${currentProject.name}"...`);
+          setPushStatus('GENERATING_LINK_SUCCESS');
+          setTimeout(() => setPushStatus(''), 3000);
+        } else {
+          addLog('ERROR', 'Inget projekt att publicera.');
+        }
+      }
+    },
+    {
+      label: 'KONTOINSTÄLLNINGAR',
+      icon: <Settings size={14} />,
+      onClick: () => setIsSettingsOpen(true)
+    },
+    { 
+      label: 'LOGGA UT FRÅN SYSTEMET', 
+      icon: <X size={14} />,
+      onClick: handleLogout 
+    }
   ];
 
   return (
@@ -676,58 +739,53 @@ function App() {
           <span className="glow-text mobile-only">SC</span>
         </div>
         
-        {/* Desktop Header Info */}
-        <div className="header-info desktop-only">
-          <span style={{ color: isValid ? 'var(--accent-primary)' : 'var(--error-color)' }}>
-             ● {isValid ? 'ONLINE' : 'SYSTEM_ERROR'}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <User size={14} />
-            <span>{session.user.email}</span>
-          </div>
-          {pushStatus && (
-            <div className="push-notification glow-text">
-               {pushStatus}
+        {/* Header Right Cluster - Premium Status & Actions */}
+        <div className="header-right desktop-only">
+          <div className="status-dock">
+            {/* System Status Indicator */}
+            <div className={`status-pill ${isValid ? 'online' : 'error'}`} title={isValid ? 'System Online' : 'System Error'}>
+              <div className="status-dot"></div>
+              <span className="status-text">{isValid ? 'LIVE' : 'ERROR'}</span>
             </div>
-          )}
-          
-          {/* Cloud Sync Status Indicator */}
-          {session && (
-            <div className={`sync-indicator ${syncStatus}`} style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px', 
-              fontSize: '0.7rem',
-              color: syncStatus === 'synced' ? 'var(--accent-primary)' : syncStatus === 'syncing' ? 'var(--accent-secondary)' : syncStatus === 'error' ? 'var(--error-color)' : 'var(--text-muted)'
-            }}>
-              <Zap size={10} className={syncStatus === 'syncing' ? 'spinner' : ''} />
-              <span style={{ fontWeight: 800 }}>CLOUD_{syncStatus.toUpperCase()}</span>
-            </div>
-          )}
-        </div>
 
-        <div className="header-actions">
-           {/* Desktop Actions */}
-           <div className="desktop-actions desktop-only">
-             {directoryHandle && isGitHubConnected && (
-                <button 
-                  onClick={handleGitHubPush} 
-                  disabled={isPushing}
-                  className="hacker-button github-push-button"
-                >
-                  {isPushing ? <Zap className="spinner" size={14} /> : <GitBranch size={14} />}
-                  {isPushing ? 'PUSHING...' : 'PUSH TO GITHUB'}
-                </button>
-             )}
-             <button 
-               onClick={() => setIsLexiconOpen(true)} 
-               className="hacker-button lexicon-button"
-               title="Öppna Kod-Lexikon"
-             >
-               <BookOpen size={14} />
-               LEXIKON
-             </button>
-           </div>
+            <div className="divider"></div>
+
+            {/* User Session */}
+            <div className="user-session" title={session.user.email}>
+              <User size={12} className="user-icon" />
+              <span className="user-label">OPERATOR</span>
+            </div>
+
+            <div className="divider"></div>
+
+            {/* Cloud Sync Indicator */}
+            <div className={`sync-pill ${syncStatus}`} title={`Cloud Sync: ${syncStatus.toUpperCase()}`}>
+              <Zap size={12} className={syncStatus === 'syncing' ? 'spinner' : ''} />
+              <span className="sync-text">{syncStatus === 'synced' ? 'READY' : syncStatus.toUpperCase()}</span>
+            </div>
+          </div>
+
+          <div className="action-cluster">
+            {directoryHandle && isGitHubConnected && (
+              <button 
+                onClick={handleGitHubPush} 
+                disabled={isPushing}
+                className="hacker-button github-push-pill"
+              >
+                {isPushing ? <Zap className="spinner" size={12} /> : <GitBranch size={12} />}
+                <span>{isPushing ? 'PUSHING...' : 'GITHUB PUSH'}</span>
+              </button>
+            )}
+            
+            <button 
+              onClick={() => setIsLexiconOpen(true)} 
+              className="lexicon-glow-button"
+              title="Öppna Kod-Lexikon"
+            >
+              <BookOpen size={14} />
+              <span>LEXIKON</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -904,7 +962,7 @@ function App() {
           </div>
           
           <div className="editor-container-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {directoryHandle ? (
+            {directoryHandle || isVirtualMode ? (
               <CodeEditor 
                 code={code} 
                 originalCode={savedCode}
@@ -1119,6 +1177,50 @@ function App() {
         isOpen={isLexiconOpen} 
         onClose={() => setIsLexiconOpen(false)} 
       />
+
+      <AnimatePresence>
+        {isCloudExplorerOpen && (
+          <CloudExplorer 
+            initialTab={cloudExplorerInitialTab}
+            onClose={() => setIsCloudExplorerOpen(false)}
+            onImport={(name, files) => {
+              // Konvertera filer till FileEntries
+              const virtualEntries: FileEntry[] = files.map(f => ({
+                name: f.path.split('/').pop() || f.path,
+                kind: 'file',
+                handle: {
+                  kind: 'file',
+                  name: f.path.split('/').pop() || f.path,
+                  getFile: async () => ({
+                    text: async () => f.content
+                  })
+                } as any
+              }));
+              
+              setFileEntries(virtualEntries);
+              setCurrentProject({
+                id: btoa(name),
+                name: name,
+                folderName: name,
+                lastOpened: Date.now(),
+                handle: null as any
+              });
+              setIsVirtualMode(true);
+              addLog('SYSTEM', `Importerade projekt "${name}" från molnet.`);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <AccountSettings 
+            onClose={() => setIsSettingsOpen(false)}
+            onLogout={handleLogout}
+            addLog={addLog}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -108,7 +108,10 @@ const Dropdown: React.FC<DropdownProps> = ({ label, items }) => {
                             }
                           }}
                         >
-                          <span className="item-label">{subItem.label}</span>
+                          <div className="item-content">
+                            {subItem.icon && <span className="item-icon">{subItem.icon}</span>}
+                            <span className="item-label">{subItem.label}</span>
+                          </div>
                           {subItem.shortcut && <span className="item-shortcut">{subItem.shortcut}</span>}
                         </button>
                       ))}
