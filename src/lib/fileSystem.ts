@@ -12,8 +12,8 @@ export interface FileEntry {
 /**
  * Öppnar en mappväljare och returnerar en DirectoryHandle.
  */
-export const openDirectory = async (): Promise<FileSystemDirectoryHandle> => {
-  return await (window as any).showDirectoryPicker();
+export const openDirectory = async (options: { startIn?: string } = {}): Promise<FileSystemDirectoryHandle> => {
+  return await (window as any).showDirectoryPicker(options);
 };
 
 /**

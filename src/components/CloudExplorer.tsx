@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { cloudSyncService } from '../services/cloudSyncService';
 import { githubService, type GitHubRepo } from '../lib/github';
-import { Zap, X, Download, Clock, Globe, Terminal, GitBranch } from 'lucide-react';
+import { Zap, X, Download, Clock, Globe, Terminal, GitBranch, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface CloudExplorerProps {
@@ -85,6 +85,22 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
     }
   };
 
+  const handleDelete = async (projectName: string) => {
+    if (!confirm(`Är du säker på att du vill radera "${projectName}" från molnet permanent? Detta kan inte ångras.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await cloudSyncService.deleteProject(projectName);
+      await loadProjects(); // Ladda om listan
+    } catch (err) {
+      setError('Kunde inte radera projektet.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredProjects = projects.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -94,12 +110,13 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
   );
 
   return (
-    <div className="hacker-overlay">
+    <div className="hacker-overlay" onClick={onClose}>
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
         className="hacker-modal cloud-explorer"
+        onClick={e => e.stopPropagation()}
       >
         <div className="modal-header">
           <div className="title-logo">
@@ -166,9 +183,14 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
                           <span>{new Date(p.updated_at).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <button className="import-btn" onClick={() => handleImport(p.name)}>
-                        <Download size={16} /> SYNKA
-                      </button>
+                      <div className="card-actions">
+                        <button className="import-btn" onClick={() => handleImport(p.name)}>
+                          <Download size={16} /> SYNKA
+                        </button>
+                        <button className="delete-cloud-btn" onClick={() => handleDelete(p.name)} title="Radera från molnet">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -372,6 +394,32 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
         .import-btn.github:hover {
           background: #444;
           box-shadow: 0 0 15px rgba(255,255,255,0.1);
+        }
+
+        .card-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .delete-cloud-btn {
+          background: rgba(255, 68, 68, 0.1);
+          color: #ff4444;
+          border: 1px solid rgba(255, 68, 68, 0.2);
+          padding: 8px;
+          border-radius: 2px;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .delete-cloud-btn:hover {
+          background: #ff4444;
+          color: white;
+          border-color: #ff4444;
+          box-shadow: 0 0 15px rgba(255, 68, 68, 0.4);
         }
 
         .retry-btn {

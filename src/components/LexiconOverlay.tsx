@@ -47,8 +47,9 @@ const LexiconOverlay: React.FC<LexiconOverlayProps> = ({ isOpen, onClose }) => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="lexicon-overlay"
+        onClick={onClose}
       >
-        <div className="lexicon-content glass-panel hacker-border">
+        <div className="lexicon-content glass-panel hacker-border" onClick={e => e.stopPropagation()}>
           <header className="lexicon-header">
             <div className="title">
               <BookOpen size={20} className="glow-text" />

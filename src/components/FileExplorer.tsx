@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Folder, File, FileCode, Plus, ChevronRight, ChevronDown, Trash2, FolderPlus, FilePlus, Image as ImageIcon } from 'lucide-react';
 import type { FileEntry } from '../lib/fileSystem';
 
@@ -22,10 +22,27 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   directoryHandle 
 }) => {
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Stäng menyn vid klick utanför
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowCreateMenu(false);
+      }
+    };
+
+    if (showCreateMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCreateMenu]);
 
   return (
     <div className="file-explorer">
-      <div className="explorer-header" style={{ position: 'relative' }}>
+      <div className="explorer-header" style={{ position: 'relative' }} ref={menuRef}>
         <span>EXPLORER</span>
         <div className="explorer-actions">
           <button 

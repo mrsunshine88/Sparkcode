@@ -93,26 +93,34 @@ export class GitHubService {
       // Då försöker vi ladda ner den direkt via download_url.
       if (!b64Content && downloadUrl) {
         console.log(`Hämtar stor fil via direktlänk: ${fileName}...`);
-        const dlResp = await fetch(downloadUrl);
-        const buffer = await dlResp.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
         
-        const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp', '.apk'];
-        const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+        try {
+          const dlResp = await fetch(downloadUrl);
+          if (!dlResp.ok) throw new Error(`Fetch failed: ${dlResp.status}`);
+          
+          const buffer = await dlResp.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          
+          const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp', '.apk'];
+          const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
 
-        if (isBinary) {
-          return {
-            path: response.data.path,
-            content: new Blob([bytes], { type: this.getMimeType(fileName) }),
-            isBinary: true
-          };
-        } else {
-          const text = new TextDecoder('utf-8').decode(bytes);
-          return {
-            path: response.data.path,
-            content: text,
-            isBinary: false
-          };
+          if (isBinary) {
+            return {
+              path: response.data.path,
+              content: new Blob([bytes], { type: this.getMimeType(fileName) }),
+              isBinary: true
+            };
+          } else {
+            const text = new TextDecoder('utf-8').decode(bytes);
+            return {
+              path: response.data.path,
+              content: text,
+              isBinary: false
+            };
+          }
+        } catch (fetchErr) {
+          console.warn(`Kunde inte hämta rå-innehåll för ${fileName} (troligen 404):`, fetchErr);
+          return null;
         }
       }
 

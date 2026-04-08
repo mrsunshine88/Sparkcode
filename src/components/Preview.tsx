@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { blobManager } from '../lib/blobManager';
 
 interface PreviewProps {
@@ -10,10 +10,19 @@ interface PreviewProps {
 
 const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = null, isBlueprintMode = false }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [debouncedCode, setDebouncedCode] = useState(code);
+
+  // Debouncing: Vänta 300ms innan vi uppdaterar preview för att spara prestanda och rensa konsolen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCode(code);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [code]);
 
   useEffect(() => {
     if (iframeRef.current && !overrideUrl) {
-      let finalHtml = code;
+      let finalHtml = debouncedCode;
       
       if (!code.toLowerCase().includes('<html')) {
         finalHtml = `

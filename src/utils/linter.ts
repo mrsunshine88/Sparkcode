@@ -43,7 +43,17 @@ export const lintHTML = (code: string): LintResult[] => {
 
   for (let i = 0; i < lines.length; i++) {
     const lineContent = lines[i];
-    let match;
+    // --- EXTRA KONTROLL: Malformerade taggar (t.ex. <style<) ---
+    const brokenTagMatch = lineContent.match(/<([a-z1-6]+)</i);
+    if (brokenTagMatch) {
+      const tagName = brokenTagMatch[1].toLowerCase();
+      results.push({
+        line: i + 1,
+        category: 'STRUCTURE',
+        severity: 'error',
+        message: `Det ser ut som att du råkat skriva < istället för > i slutet av din tagg. Den ska se ut så här: <${tagName}>.`
+      });
+    }
 
     while ((match = tagRegex.exec(lineContent)) !== null) {
       const isClosing = match[1] === '/';

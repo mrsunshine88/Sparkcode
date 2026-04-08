@@ -139,5 +139,24 @@ export const cloudSyncService = {
       name,
       updated_at: date
     }));
+  },
+
+  /**
+   * Raderar ett projekt och alla dess filer från molnet.
+   */
+  async deleteProject(projectName: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { error } = await supabase
+      .from('file_sync')
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('project_name', projectName);
+
+    if (error) {
+      console.error('CloudSync Delete Error:', error);
+      throw error;
+    }
   }
 };
