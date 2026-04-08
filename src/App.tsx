@@ -285,38 +285,61 @@ function App() {
       
       performAutoPull();
 
-      // TRUE GHOST SYNC: Aktivera realtids-prenumeration
-      if (isCloudSyncEnabled) {
-        const subscription = cloudSyncService.subscribeToProject(
-          currentProject.name,
-          session.user.id,
-          async (cloudFile) => {
-            // Echo-skydd: Om koden i molnet är likadan som den vi har i editorn, gör inget
-            if (activeFileName === cloudFile.file_path && code === cloudFile.content) {
-              return;
+            // TRUE GHOST SYNC: Aktivera realtids-prenumeration
+            if (isCloudSyncEnabled) {
+              const subscription = cloudSyncService.subscribeToProject(
+                currentProject.name,
+                session.user.id,
+                async (cloudFile) => {
+                  // Echo-skydd: Om koden i molnet är likadan som den vi har i editorn, gör inget
+                  if (activeFileName === cloudFile.file_path && code === cloudFile.content) {
+                    return;
+                  }
+      
+                  console.log(`Ghost Sync Event: ${cloudFile.file_path} updated.`);
+                  setSyncStatus('syncing');
+                  
+                  // Om vi är i virtuellt läge (ingen mapp ansluten), uppdaterar vi bara lokalt state
+                  if (!directoryHandle) {
+                    if (activeFileName === cloudFile.file_path) {
+                      setCode(cloudFile.content);
+                    }
+                    // Uppdatera virtuella fileEntries så att de har rätt innehåll om man växlar flik
+                    setFileEntries(prev => prev.map(e => {
+                      if (e.name === cloudFile.file_path) {
+                        return {
+                          ...e,
+                          handle: {
+                            ...e.handle,
+                            getFile: async () => ({
+                              text: async () => cloudFile.content
+                            })
+                          } as any
+                        };
+                      }
+                      return e;
+                    }));
+                  } else {
+                    // Annars synkar vi ner till hårddisken som vanligt
+                    await cloudSyncService.syncCloudToLocal(
+                      currentProject.name,
+                      fileEntries,
+                      (path, content) => {
+                        if (activeFileName === path) setCode(content);
+                      },
+                      cloudFile
+                    );
+                  }
+                  
+                  setSyncStatus('synced');
+                  addLog('SUCCESS', `Ghost Sync: ${cloudFile.file_path} uppdaterad från molnet.`);
+                }
+              );
+      
+              return () => {
+                subscription.unsubscribe();
+              };
             }
-
-            console.log(`Ghost Sync Event: ${cloudFile.file_path} updated.`);
-            setSyncStatus('syncing');
-            
-            await cloudSyncService.syncCloudToLocal(
-              currentProject.name,
-              fileEntries,
-              (path, content) => {
-                if (activeFileName === path) setCode(content);
-              },
-              cloudFile
-            );
-            
-            setSyncStatus('synced');
-            addLog('SUCCESS', `Ghost Sync: ${cloudFile.file_path} uppdaterad från molnet.`);
-          }
-        );
-
-        return () => {
-          subscription.unsubscribe();
-        };
-      }
     }
   }, [session, currentProject?.id, isCloudSyncEnabled]); // Körs när projektet, sessionen eller synk-inställningen ändras
 
@@ -1494,6 +1517,7 @@ function App() {
               
               // 2. Intelligent Synk: Samma projekt på Desktop
               if (isCloudSync && isFileSystemSupported && currentProject?.name === name && directoryHandle) {
+                // ... befintlig desktop-synk kod ...
                 addLog('SYSTEM', `Synkar "${name}" direkt till nuvarande mapp...`);
                 setIsCloudExplorerOpen(false);
                 
@@ -1518,13 +1542,24 @@ function App() {
                 return;
               }
 
-              // 3. Mobil/Moln-läge: Ingen FS support (eller om användaren väljer det)
-              if (!isFileSystemSupported) {
-                addLog('SYSTEM', `Mobil-läge detekterat. Öppnar "${name}" virtuellt...`);
+              // 3. Mobil/Moln-läge: Ingen FS support ELLER om vi kör molnsynk (så vi slipper mapptrafik på mobilen)
+              if (!isFileSystemSupported || isCloudSync) {
+                addLog('SYSTEM', `${isCloudSync ? 'Moln-läge' : 'Mobil-läge'} aktiverat. Öppnar "${name}" sömlöst...`);
                 setIsCloudExplorerOpen(false);
                 
                 // Töm state och ladda filerna till minnet istället
                 setDirectoryHandle(null);
+                
+                // SKAPA PSEUDO-PROJEKT för att aktivera realtidssynk
+                const pseudoProject: any = {
+                  id: 'virtual-' + btoa(name),
+                  name: name,
+                  folderName: name,
+                  lastOpened: Date.now(),
+                  handle: null
+                };
+                setCurrentProject(pseudoProject);
+
                 const virtualEntries = files.map(f => ({
                   name: f.path,
                   kind: 'file' as const,
@@ -1544,9 +1579,10 @@ function App() {
                   setActiveFileName(firstFile.name);
                   setActiveFileHandle(firstFile.handle);
                   setCode(files.find(f => f.path === firstFile.name)?.content as string || '');
+                  setSavedCode(files.find(f => f.path === firstFile.name)?.content as string || '');
                 }
                 
-                addLog('SUCCESS', `"${name}" är nu öppet i molnläge.`);
+                addLog('SUCCESS', `"${name}" är nu öppet i realtidsläge.`);
                 return;
               }
 
