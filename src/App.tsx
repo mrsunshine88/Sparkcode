@@ -457,16 +457,14 @@ function App() {
       refreshFileSystem();
     };
 
-    window.addEventListener('focus', handleFocus);
-    
-    // Heartbeat: Kolla även var 15:e sekund för säkerhets skull
-    const interval = setInterval(() => refreshFileSystem(), 15000);
+    // Heartbeat: Kolla även var 20:e sekund för säkerhets skull
+    const interval = setInterval(() => refreshFileSystem(), 20000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
-  }, [directoryHandle, activeFileHandle, code, savedCode, activeFileName]);
+  }, [directoryHandle, activeFileHandle]);
 
   const handleConnectDirectory = async () => {
     try {
