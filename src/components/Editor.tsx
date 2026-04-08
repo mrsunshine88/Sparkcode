@@ -52,9 +52,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onChange, 
   language = 'html', 
   options = {},
-  fileName,
-  onSave,
-  onSearchSelection,
   onInstance
 }) => {
   const vimModeRef = useRef<any>(null);

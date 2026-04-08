@@ -1189,12 +1189,7 @@ function App() {
                   isDiffMode={isDiffMode}
                   isVimMode={isVimMode}
                   onChange={(val) => val !== undefined && setCode(val)} 
-                  options={{
-                    onMount: (editor: any) => {
-                      setEditorInstance(editor);
-                      if (onInstance) onInstance(editor);
-                    }
-                  }}
+                  onInstance={(editor) => setEditorInstance(editor)}
                   fileName={activeFileName}
                   onSave={saveCurrentFile}
                   onSearchSelection={handleSearchSelection}
