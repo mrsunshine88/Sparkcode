@@ -380,10 +380,11 @@ function App() {
       setFileEntries(entries);
       
       // Spara projekt i historiken
-      const saved = await projectRegistry.registerProject(handle.name, handle);
+      const saved = await projectRegistry.saveProject(handle);
       setCurrentProject(saved);
       addLog('SYSTEM', `Ansluten till: ${handle.name}`);
-      setRecentProjects(projectRegistry.getRecentProjects());
+      const recent = await projectRegistry.getRecentProjects();
+      setRecentProjects(recent);
       
       // AUTO-SELECT: Om index.html finns, öppna den direkt
       const indexFile = entries.find(e => e.name.toLowerCase() === 'index.html');
