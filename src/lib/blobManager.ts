@@ -26,10 +26,7 @@ export class BlobManager {
       if (entry.kind === 'file') {
         try {
           const content = await readFileContent(entry.handle as FileSystemFileHandle);
-          const type = this.getMimeType(entry.name);
-          const blob = new Blob([content], { type });
-          const url = URL.createObjectURL(blob);
-          this.blobMap.set(path, url);
+          this.updateBlob(path, content);
         } catch (err: any) {
           // Om filen inte hittas (t.ex. raderad/flyttad snabbt), logga bara en varning istället för error
           if (err.name === 'NotFoundError') {
@@ -42,6 +39,21 @@ export class BlobManager {
         await this.refreshBlobs(entry.children, path);
       }
     }
+  }
+
+  /**
+   * Uppdaterar en enskild blob utan att skanna hela projektet.
+   */
+  updateBlob(path: string, content: string): void {
+    const type = this.getMimeType(path);
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    
+    // Rensa gammal blob om den fanns
+    const oldUrl = this.blobMap.get(path);
+    if (oldUrl) URL.revokeObjectURL(oldUrl);
+    
+    this.blobMap.set(path, url);
   }
 
   /**

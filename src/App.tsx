@@ -160,36 +160,37 @@ function App() {
     }
   }, []);
 
-  // Kör lintern när koden ändras (Ska alltid döma, även utan vald fil)
+  // Kör lintern när koden ändras (Debouncad för prestanda)
   useEffect(() => {
-    let currentErrors: LintResult[] = [];
-    const fileNameLower = activeFileName?.toLowerCase() || '';
-    
-    // Om ingen fil är aktiv, kör vi standard HTML-linter på editorn
-    if (!activeFileName || fileNameLower.endsWith('.html') || fileNameLower === 'index' || fileNameLower === 'test') {
-      currentErrors = lintHTML(code);
+    const timer = setTimeout(() => {
+      let currentErrors: LintResult[] = [];
+      const fileNameLower = activeFileName?.toLowerCase() || '';
       
-      // MENTOR RÖNTGENSYN: Hitta CSS inuti <style>-taggar
-      const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-      let match;
-      while ((match = styleRegex.exec(code)) !== null) {
-        const styleContent = match[1];
-        const styleStartLine = code.substring(0, match.index).split('\n').length;
-        const cssErrors = lintCSS(styleContent);
+      if (!activeFileName || fileNameLower.endsWith('.html') || fileNameLower === 'index' || fileNameLower === 'test') {
+        currentErrors = lintHTML(code);
         
-        // Mappa om radnummer för CSS-fel till HTML-filens rader
-        const mappedErrors = cssErrors.map(err => ({
-          ...err,
-          line: err.line + styleStartLine - 1
-        }));
-        currentErrors.push(...mappedErrors);
+        const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+        let match;
+        while ((match = styleRegex.exec(code)) !== null) {
+          const styleContent = match[1];
+          const styleStartLine = code.substring(0, match.index).split('\n').length;
+          const cssErrors = lintCSS(styleContent);
+          
+          const mappedErrors = cssErrors.map(err => ({
+            ...err,
+            line: err.line + styleStartLine - 1
+          }));
+          currentErrors.push(...mappedErrors);
+        }
+      } else if (fileNameLower.endsWith('.css')) {
+        currentErrors = lintCSS(code);
       }
-    } else if (fileNameLower.endsWith('.css')) {
-      currentErrors = lintCSS(code);
-    }
-    
-    setErrors(currentErrors);
-    setIsValid(!currentErrors.some(e => e.severity === 'error'));
+      
+      setErrors(currentErrors);
+      setIsValid(!currentErrors.some(e => e.severity === 'error'));
+    }, 500); // MENTOR VÄNTAR 500ms - Frigör processorn för skrivande
+
+    return () => clearTimeout(timer);
   }, [code, activeFileName]);
 
   // Kvalitets-index beräkning för status-raden
@@ -211,8 +212,10 @@ function App() {
         await writeFileContent(activeFileHandle, code);
         setSavedCode(code);
         
-        // Uppdatera Blobs
-        await blobManager.refreshBlobs(fileEntries);
+        // Uppdatera endast den aktuella filens Blob för blixtsnabb respons
+        if (activeFileName) {
+          blobManager.updateBlob(activeFileName, code);
+        }
         setPreviewVersion(v => v + 1);
         
         // Uppdatera funktioner för Deep-Linting
@@ -318,61 +321,42 @@ function App() {
                     return;
                   }
       
-                  console.log(`Ghost Sync Event: ${cloudFile.file_path} updated.`);
-                  setSyncStatus('syncing');
-                  
-                  // Om vi är i virtuellt läge (ingen mapp ansluten), uppdaterar vi bara lokalt state
-                  if (!directoryHandle) {
-                    if (activeFileName === cloudFile.file_path) {
-                      setLastChangeSource('remote');
-                      setCode(cloudFile.content);
-                      setSavedCode(cloudFile.content);
-                    }
-                    // Uppdatera virtuella fileEntries så att de har rätt innehåll om man växlar flik
-                    setFileEntries(prev => prev.map(e => {
-                      if (e.name === cloudFile.file_path) {
-                        return {
-                          ...e,
-                          handle: {
-                            ...e.handle,
-                            getFile: async () => ({
-                              text: async () => cloudFile.content
-                            })
-                          } as any
-                        };
-                      }
-                      return e;
-                    }));
-                  } else {
-                    // Annars synkar vi ner till hårddisken
+                  // UI-ONLY SYNC: För aktiv fil uppdaterar vi bara state ögonblickligen.
+                  // Disk-skrivningen sker i bakgrunden via Auto-Save timern (1s efter stopp).
+                  if (activeFileName === cloudFile.file_path) {
                     setLastChangeSource('remote');
-
-                    if (activeFileName === cloudFile.file_path) {
-                      // OPTIMERING: För den aktiva filen uppdaterar vi bara UI och minne för blixtsnabb respons.
-                      // Hårddisk-skrivningen sker automatiskt via Auto-Save timern i App.tsx (1 sek).
-                      console.log(`Blixtsnabb UI-uppdatering för aktiv fil: ${cloudFile.file_path}`);
-                      setCode(cloudFile.content);
-                      setSavedCode(cloudFile.content);
-                    } else {
-                      // Bakgrundsfiler skrivs till disk som vanligt
-                      await cloudSyncService.syncCloudToLocal(
-                        currentProject.name,
-                        fileEntries,
-                        (path, content) => {
-                          // Detta anropas sällan här då vi redan kollat activeFileName ovan, 
-                          // men vi behåller logiken för säkerhets skull.
-                          if (activeFileName === path) {
-                            setCode(content);
-                            setSavedCode(content);
-                          }
-                        },
-                        cloudFile
-                      );
+                    setCode(cloudFile.content);
+                    setSavedCode(cloudFile.content); // Detta stoppar "push back"
+                  }
+                  
+                  // Uppdatera virtuella fileEntries i bakgrunden
+                  setFileEntries(prev => prev.map(e => {
+                    if (e.name === cloudFile.file_path) {
+                      return {
+                        ...e,
+                        handle: {
+                          ...e.handle,
+                          getFile: async () => ({
+                            text: async () => cloudFile.content
+                          })
+                        } as any
+                      };
                     }
+                    return e;
+                  }));
+
+                  // Allt annat (disk-skrivning av bakgrundsfiler) sker asynkront
+                  if (activeFileName !== cloudFile.file_path && directoryHandle) {
+                    cloudSyncService.syncCloudToLocal(
+                      currentProject.name,
+                      fileEntries,
+                      () => {},
+                      cloudFile
+                    );
                   }
                   
                   setSyncStatus('synced');
-                  addLog('SUCCESS', `Ghost Sync: ${cloudFile.file_path} uppdaterad från molnet.`);
+                  addLog('SUCCESS', `Flash Sync: ${cloudFile.file_path} uppdaterad.`);
                 }
               );
       

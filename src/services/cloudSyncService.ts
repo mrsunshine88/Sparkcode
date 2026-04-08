@@ -124,8 +124,8 @@ export const cloudSyncService = {
   async sendBroadcast(projectName: string, fileData: Partial<CloudFile>) {
     const channel = this.getChannel(projectName);
     
-    // Om vi inte är prenumerade än, gör det snabbt
-    if (channel.state === 'closed' || channel.state === 'joined') {
+    // Snabb-check av status, prenumerera bara om det behövs
+    if (channel.state !== 'joined' && channel.state !== 'joining') {
       channel.subscribe();
     }
 
@@ -142,13 +142,11 @@ export const cloudSyncService = {
   subscribeToProject(projectName: string, userId: string, onUpdate: (file: CloudFile) => void) {
     const channel = this.getChannel(projectName);
     
-    // Rensa eventuella gamla handlers för att undvika dubbla anrop
-    channel.unsubscribe(); 
-    
-    const newChannel = supabase.channel(`project-sync-${projectName}`);
-    this.activeChannels.set(`project-sync-${projectName}`, newChannel);
+    // Sluta lyssna på gamla events om kanalen återanvänds
+    channel.off('postgres_changes');
+    channel.off('broadcast');
 
-    return newChannel
+    return channel
       .on(
         'postgres_changes',
         {
@@ -157,7 +155,7 @@ export const cloudSyncService = {
           table: 'file_sync',
           filter: `user_id=eq.${userId}`
         },
-        (payload) => {
+        (payload: any) => {
           const file = payload.new as CloudFile;
           if (file && file.project_name === projectName) {
             onUpdate(file);
@@ -167,16 +165,17 @@ export const cloudSyncService = {
       .on(
         'broadcast',
         { event: 'file_update' },
-        (payload) => {
-          // Blixtsnabb uppdatering via broadcast
+        (payload: any) => {
           const file = payload.payload as CloudFile;
           if (file && file.project_name === projectName) {
-            console.log('⚡️ Broadcast Sync Received:', file.file_path);
+            console.log('⚡️ Broadcast Update Received');
             onUpdate(file);
           }
         }
       )
-      .subscribe();
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') console.log('✅ Synk-kanal redo');
+      });
   },
 
   /**
