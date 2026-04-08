@@ -1182,17 +1182,44 @@ function App() {
           </div>
           
           <div className="editor-container-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {directoryHandle || isVirtualMode ? (
-              <CodeEditor 
-                code={code} 
-                originalCode={savedCode}
-                isDiffMode={isDiffMode}
-                isVimMode={isVimMode}
-                onChange={(val) => val !== undefined && setCode(val)} 
-                options={{
-                  onMount: (editor: any) => setEditorInstance(editor)
-                }}
-              />
+            {directoryHandle || fileEntries.length > 0 ? (
+              <div className="editor-container" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <CodeEditor 
+                  code={code} 
+                  originalCode={savedCode}
+                  isDiffMode={isDiffMode}
+                  isVimMode={isVimMode}
+                  onChange={(val) => val !== undefined && setCode(val)} 
+                  options={{
+                    onMount: (editor: any) => setEditorInstance(editor)
+                  }}
+                  fileName={activeFileName}
+                  onSave={saveCurrentFile}
+                  onSearchSelection={handleSearchSelection}
+                />
+                
+                {errors.length > 0 && (
+                  <AIErrorPanel 
+                    errors={errors} 
+                    onJump={(line) => {
+                      if (editorInstance) {
+                        editorInstance.revealLineInCenter(line);
+                        editorInstance.setPosition({ lineNumber: line, column: 1 });
+                        editorInstance.focus();
+                      }
+                    }}
+                  />
+                )}
+                
+                <div className="editor-footer">
+                  <div className="file-info shadow-text">
+                    <HistoryIcon size={12} /> {directoryHandle ? 'LOKAL FIL ANSLUTEN' : 'VIRTUELT ARKIV AKTIVT'}
+                  </div>
+                  <div className="selection-info">
+                    {qualityScore}% QUALITY
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="connect-prompt">
                 {projectToRestore ? (
@@ -1218,48 +1245,6 @@ function App() {
                         VÄLJ ANNAN MAPP
                       </button>
                     </div>
-                  </>
-            {directoryHandle || fileEntries.length > 0 ? (
-              <div className="editor-container" style={{ position: 'relative' }}>
-                <CodeEditor 
-                  code={code} 
-                  onChange={setCode}
-                  fileName={activeFileName}
-                  onSave={saveCurrentFile}
-                  onInstance={setEditorInstance}
-                  onSearchSelection={handleSearchSelection}
-                  isVimMode={isVimMode}
-                />
-                
-                {errors.length > 0 && (
-                  <AIErrorPanel 
-                    errors={errors} 
-                    onJump={(line) => {
-                      if (editorInstance) {
-                        editorInstance.revealLineInCenter(line);
-                        editorInstance.setPosition({ lineNumber: line, column: 1 });
-                        editorInstance.focus();
-                      }
-                    }}
-                  />
-                )}
-                
-                <div className="editor-footer">
-                  <div className="file-info shadow-text">
-                    <HistoryIcon size={12} /> LOKAL BACKUP AKTIV
-                  </div>
-                  <div className="selection-info">
-                    {qualityScore}% QUALITY
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-state-container">
-                {isVirtualMode ? (
-                  <>
-                    <Zap size={48} className="glow-text animate-pulse" />
-                    <h2 className="glow-text">VIRTUELT ARKIV AKTIVT</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Synkar filer direkt via molnet. Inget val av lokal mapp krävs.</p>
                   </>
                 ) : (
                   <>
