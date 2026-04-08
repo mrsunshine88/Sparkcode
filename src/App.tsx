@@ -145,6 +145,20 @@ function App() {
         const lastProject = projects.find(p => p.id === lastId);
         if (lastProject) {
           setProjectToRestore(lastProject);
+        } else if (lastId.startsWith('virtual-')) {
+          // Återställ virtuellt projekt (Moln-läge)
+          const virtualName = localStorage.getItem('sparkcode_virtual_project_name');
+          if (virtualName) {
+            const pseudoProject: any = {
+              id: lastId,
+              name: virtualName,
+              folderName: virtualName,
+              lastOpened: Date.now(),
+              handle: null
+            };
+            setCurrentProject(pseudoProject);
+            addLog('SYSTEM', `Återställde molnprojekt: ${virtualName}`);
+          }
         }
       }
     });
@@ -332,6 +346,14 @@ function App() {
                     setSavedCode(cloudFile.content);
                     setCode(cloudFile.content);
                     setLastChangeSource('remote');
+
+                    // FORCE DISK WRITE: Om vi är på datorn (har en handle), skriv till disken nu!
+                    // Detta sker asynkront så det segar inte ner UI:t.
+                    if (activeFileHandle) {
+                      writeFileContent(activeFileHandle, cloudFile.content).catch(err => {
+                        console.error('Blixt-synk: Kunde inte skriva till disk:', err);
+                      });
+                    }
                   }
                   
                   // Uppdatera virtuella fileEntries i bakgrunden
@@ -621,6 +643,31 @@ function App() {
     });
   };
 
+  const handleRestoreProject = async () => {
+    if (!projectToRestore) return;
+    try {
+      const hasPermission = await projectRegistry.verifyPermission(projectToRestore.handle);
+      if (hasPermission) {
+        setDirectoryHandle(projectToRestore.handle);
+        setCurrentProject(projectToRestore);
+        const entries = await readDirectory(projectToRestore.handle);
+        setFileEntries(entries);
+        await blobManager.refreshBlobs(entries);
+        setPreviewVersion(v => v + 1);
+        setProjectToRestore(null);
+        addLog('SUCCESS', `Projekt återställt: ${projectToRestore.name}`);
+        
+        // Öppna index.html om den finns
+        const indexFile = entries.find(e => e.name.toLowerCase() === 'index.html');
+        if (indexFile) handleFileSelect(indexFile.handle as FileSystemFileHandle);
+      }
+    } catch (err) {
+      console.error('Kunde inte återställa projekt:', err);
+      addLog('ERROR', 'Kunde inte återställa mappen. Försök att ansluta den manuellt.');
+      setProjectToRestore(null);
+    }
+  };
+
   const handleSearchSelection = () => {
     if (editorInstance) {
       const selection = editorInstance.getSelection();
@@ -847,6 +894,21 @@ function App() {
     return (
       <div className="app-container">
         <div className="crt-overlay"></div>
+        {projectToRestore && (
+          <div className="persistence-notification active">
+            <div className="notification-content">
+              <div className="notification-icon"><Lock size={16} /></div>
+              <div className="notification-text">
+                <span className="project-label">Återuppta projekt</span>
+                <span className="project-name">{projectToRestore.name}</span>
+              </div>
+              <div className="notification-actions">
+                <button className="resume-button" onClick={handleRestoreProject}>LÅS UPP MAPP</button>
+                <button className="close-notification" onClick={() => setProjectToRestore(null)}><X size={14} /></button>
+              </div>
+            </div>
+          </div>
+        )}
         <AuthForm />
       </div>
     );
@@ -1640,6 +1702,8 @@ function App() {
                   handle: null
                 };
                 setCurrentProject(pseudoProject);
+                localStorage.setItem('sparkcode_active_project_id', pseudoProject.id); // SPARA I MINNET!
+                localStorage.setItem('sparkcode_virtual_project_name', name);
 
                 const virtualEntries = files.map(f => ({
                   name: f.path,
