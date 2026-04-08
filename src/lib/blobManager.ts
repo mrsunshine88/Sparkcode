@@ -30,8 +30,13 @@ export class BlobManager {
           const blob = new Blob([content], { type });
           const url = URL.createObjectURL(blob);
           this.blobMap.set(path, url);
-        } catch (err) {
-          console.error(`Kunde inte skapa blob för ${path}:`, err);
+        } catch (err: any) {
+          // Om filen inte hittas (t.ex. raderad/flyttad snabbt), logga bara en varning istället för error
+          if (err.name === 'NotFoundError') {
+            console.warn(`Hoppar över blob för ${path} (Filen hittades inte på disk).`);
+          } else {
+            console.error(`Kunde inte skapa blob för ${path}:`, err);
+          }
         }
       } else if (entry.kind === 'directory' && entry.children) {
         await this.refreshBlobs(entry.children, path);

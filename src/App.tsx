@@ -36,6 +36,7 @@ import * as prettierBabel from 'prettier/parser-babel';
 import { cloudSyncService } from './services/cloudSyncService';
 import { CloudExplorer } from './components/CloudExplorer';
 import { AccountSettings } from './components/AccountSettings';
+import ImportChoiceModal from './components/ImportChoiceModal';
 import { AnimatePresence } from 'framer-motion';
 import './App.css';
 
@@ -112,6 +113,9 @@ function App() {
   const [isBlueprintMode, setIsBlueprintMode] = useState(false);
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
+
+  // Import Modal state
+  const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
 
   // Hantera autentisering
   useEffect(() => {
@@ -362,8 +366,9 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [directoryHandle]);
 
-  const refreshFileSystem = async () => {
-    if (!directoryHandle) return;
+  const refreshFileSystem = async (forceHandle?: FileSystemDirectoryHandle) => {
+    const handle = forceHandle || directoryHandle;
+    if (!handle) return;
     try {
       const entries = await readDirectory(directoryHandle);
       setFileEntries(entries);
@@ -397,7 +402,7 @@ function App() {
     window.addEventListener('focus', handleFocus);
     
     // Heartbeat: Kolla även var 15:e sekund för säkerhets skull
-    const interval = setInterval(refreshFileSystem, 15000);
+    const interval = setInterval(() => refreshFileSystem(), 15000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -1350,94 +1355,85 @@ function App() {
             initialTab={cloudExplorerInitialTab}
             onClose={() => setIsCloudExplorerOpen(false)}
             onImport={async (name, files) => {
-              setSyncStatus('syncing');
-              addLog('SYSTEM', `Förbereder import av "${name}" (${files.length} filer)...`);
-
-              let targetDir = directoryHandle;
-
-              // SMART CLONE: Fråga användaren om de vill skapa ett nytt projekt eller lägga till i det nuvarande
-              if (directoryHandle) {
-                const createNew = confirm(`Vill du skapa ett NYTT PROJEKT för "${name}"?\n\nKlicka OK för att välja en ny mapp.\nKlicka Avbryt för att lägga till filerna i ditt nuvarande projekt (${directoryHandle.name}).`);
-                
-                if (createNew) {
-                  try {
-                    const newHandle = await openDirectory();
-                    targetDir = newHandle;
-                    setDirectoryHandle(newHandle);
-                    addLog('SYSTEM', `Byter till nytt projekt: ${newHandle.name}`);
-                  } catch (err) {
-                    addLog('WARNING', 'Ingen ny mapp valdes. Fortsätter med nuvarande projekt.');
-                  }
-                }
-              }
-
-              if (targetDir) {
-                // SPARA TILL DISK: Rekursivt skapande av filer och mappar
-                try {
-                  addLog('SYSTEM', `Börjar skriva filer till disken...`);
-                  
-                  let count = 0;
-                  for (const file of files) {
-                    count++;
-                    const pathParts = file.path.split('/');
-                    const fileName = pathParts.pop()!;
-                    let currentDir = targetDir;
-
-                    // Skapa undermappar om de inte finns
-                    for (const folderName of pathParts) {
-                      currentDir = await createNewFolder(currentDir, folderName);
-                    }
-
-                    // Skapa och skriv filen (hanterar både text och Blob)
-                    try {
-                      const fileHandle = await createNewFile(currentDir, fileName);
-                      await writeFileContent(fileHandle, file.content);
-                    } catch (fileErr) {
-                      console.error(`Kunde inte skriva filen ${file.path}:`, fileErr);
-                    }
-
-                    // Rapportera framsteg var 10:e fil
-                    if (count % 10 === 0 || count === files.length) {
-                      addLog('SYSTEM', `Framsteg: ${count}/${files.length} filer sparade...`);
-                    }
-                  }
-                  
-                  await refreshFileSystem();
-                  addLog('SUCCESS', `Projektet "${name}" är nu klart och sparat på din dator!`);
-                } catch (err) {
-                  console.error('Kunde inte spara till disk:', err);
-                  addLog('ERROR', 'Ett fel uppstod när filer skrevs till disk. Kontrollera behörigheter.');
-                }
-              } else {
-                // VIRTUELLT LÄGE: Endast i minnet
-                const virtualEntries: FileEntry[] = files.map(f => ({
-                  name: f.path.split('/').pop() || f.path,
-                  kind: 'file',
-                  handle: {
-                    kind: 'file',
-                    name: f.path.split('/').pop() || f.path,
-                    getFile: async () => ({
-                      text: async () => typeof f.content === 'string' ? f.content : 'Binary File (Image)'
-                    })
-                  } as any
-                }));
-                
-                setFileEntries(virtualEntries);
-                setIsVirtualMode(true);
-                addLog('SYSTEM', `Importerade "${name}" i virtuellt läge (inget sparas på disk).`);
-              }
-
-              setCurrentProject({
-                id: btoa(name),
-                name: name,
-                folderName: name,
-                lastOpened: Date.now(),
-                handle: directoryHandle as any
-              });
-              
-              setSyncStatus('synced');
+              // Visa den snygga import-modalen istället för confirm()
+              setImportModalData({ isOpen: true, repoName: name, files });
+              setIsCloudExplorerOpen(false);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      <ImportChoiceModal 
+        isOpen={!!importModalData?.isOpen}
+        repoName={importModalData?.repoName || ''}
+        currentProjectName={directoryHandle?.name || ''}
+        onClose={() => setImportModalData(null)}
+        onChoice={async (choice) => {
+          if (!importModalData) return;
+          const { repoName, files } = importModalData;
+          setImportModalData(null);
+          
+          setSyncStatus('syncing');
+          addLog('SYSTEM', `Förbereder import av "${repoName}" (${files.length} filer)...`);
+
+          let targetDir = directoryHandle;
+
+          if (choice === 'NEW') {
+            try {
+              const newHandle = await openDirectory();
+              targetDir = newHandle;
+              // VIKTIGT: Vi sätter state men använder targetDir direkt nedan för att undvika 'stale state'
+              setDirectoryHandle(newHandle);
+              addLog('SYSTEM', `Byter till nytt projekt: ${newHandle.name}`);
+            } catch (err) {
+              addLog('WARNING', 'Ingen ny mapp valdes. Fortsätter med nuvarande projekt.');
+            }
+          }
+
+          if (targetDir) {
+            try {
+              addLog('SYSTEM', `Börjar skriva filer till disken...`);
+              
+              let count = 0;
+              for (const file of files) {
+                count++;
+                const pathParts = file.path.split('/');
+                const fileName = pathParts.pop()!;
+                let currentDir = targetDir;
+
+                for (const folderName of pathParts) {
+                  currentDir = await createNewFolder(currentDir, folderName);
+                }
+
+                try {
+                  const fileHandle = await createNewFile(currentDir, fileName);
+                  await writeFileContent(fileHandle, file.content);
+                } catch (fileErr) {
+                  console.error(`Kunde inte skriva filen ${file.path}:`, fileErr);
+                }
+
+                if (count % 10 === 0 || count === files.length) {
+                  addLog('SYSTEM', `Framsteg: ${count}/${files.length} filer sparade...`);
+                }
+              }
+              
+              // Uppdatera projekt-metadata med RÄTT handle
+              const saved = await projectRegistry.saveProject(targetDir, repoName);
+              setCurrentProject(saved);
+              localStorage.setItem('sparkcode_active_project_id', saved.id);
+              
+              // Tvinga en refresh på RÄTT handle
+              await refreshFileSystem(targetDir);
+              
+              addLog('SUCCESS', `Projektet "${repoName}" är nu klart och sparat på din dator!`);
+            } catch (err) {
+              console.error('Kunde inte spara till disk:', err);
+              addLog('ERROR', 'Ett fel uppstod när filer skrevs till disk.');
+            }
+          }
+          setSyncStatus('synced');
+        }}
+      />
         )}
       </AnimatePresence>
 
