@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --bg-dark: #0a0a0a;
+  --bg-darker: #000000;
+  --bg-card: #111111;
+  --accent-primary: #00ff41; /* Matrix Green */
+  --accent-secondary: #ff9d00; /* Hacker Orange */
+  --text-main: #00ff41;
+  --text-muted: #008822;
+  --border-color: #004411;
+  --error-color: #ff3333;
+  
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  font-family: var(--font-mono); /* Force mono everywhere */
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: var(--text-main);
+  background-color: var(--bg-darker);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-darker);
+}
+
+#root {
+  width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* CRT Scanline Effect */
+.crt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.1) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.2;
+}
+
+/* Glow Effect for text */
+.glow-text {
+  text-shadow: 0 0 5px var(--accent-primary), 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.glow-text-orange {
+  text-shadow: 0 0 5px var(--accent-secondary), 0 0 10px rgba(255, 157, 0, 0.5);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}

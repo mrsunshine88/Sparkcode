@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "title": "Välkommen till SparkCode",
+    "description": "I den här första utmaningen ska du bara skapa en rubrik. Använd en <h1>-tagg för att skriva 'Hej världen!'.",
+    "target": "<h1>Hej världen!</h1>"
+  },
+  {
+    "id": 2,
+    "title": "Färglägg din text",
+    "description": "Gör rubriken blå genom att lägga till ett inline-style attribut: <h1 style='color: blue'>.",
+    "target": "color: blue"
+  }
+]
