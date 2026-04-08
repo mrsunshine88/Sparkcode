@@ -140,13 +140,19 @@ export const cloudSyncService = {
    * Prenumererar på realtidsändringar (både databas och broadcast).
    */
   subscribeToProject(projectName: string, userId: string, onUpdate: (file: CloudFile) => void) {
-    const channel = this.getChannel(projectName);
+    const channelName = `project-sync-${projectName}`;
+    let channel = this.getChannel(projectName);
     
-    // Sluta lyssna på gamla events om kanalen återanvänds
-    channel.off('postgres_changes');
-    channel.off('broadcast');
+    // Om kanalen redan finns, rensa den först för att undvika minnesläckage/dubbla events
+    if (channel) {
+      supabase.removeChannel(channel);
+      this.activeChannels.delete(channelName);
+    }
+    
+    const newChannel = supabase.channel(channelName);
+    this.activeChannels.set(channelName, newChannel);
 
-    return channel
+    return newChannel
       .on(
         'postgres_changes',
         {
