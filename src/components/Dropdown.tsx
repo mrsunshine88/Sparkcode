@@ -53,7 +53,7 @@ const Dropdown: React.FC<DropdownProps> = ({ label, items }) => {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                zIndex: 9999, /* Extremt högt för att täcka allt */
+                zIndex: 9990, /* Strax under menyn */
                 background: 'transparent'
               }}
             />
