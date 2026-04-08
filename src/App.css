@@ -208,11 +208,11 @@
 
   .main-content {
     flex-direction: column;
-    height: calc(100vh - 50px - 50px); /* header + mobile-tabs */
+    height: calc(100vh - 50px - 50px - 32px); /* header + mobile-tabs + status-bar */
   }
   
-  .file-explorer {
-    display: none; /* In mobile, managed by tabs or menu? Keep it hidden for focus */
+  .file-explorer, .pane-header {
+    display: none !important; /* Dölj explorer och fil-rubriker på mobilen */
   }
 
   .editor-pane, .preview-pane {
