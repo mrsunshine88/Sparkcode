@@ -241,11 +241,11 @@ function App() {
             currentProject.name, 
             fileEntries,
             (path, content) => {
-              if (activeFileName === path) setCode(content);
+              if (activeFileName === path && code !== content) setCode(content);
             }
           );
           setSyncStatus('synced');
-          addLog('SYSTEM', 'Sömlös molnsynk slutförd: Lokala filer uppdaterade.');
+          addLog('SUCCESS', 'Initial molnsynk slutförd.');
         } catch (err) {
             console.error('Auto-Pull Error:', err);
             setSyncStatus('error');
@@ -253,8 +253,41 @@ function App() {
       };
       
       performAutoPull();
+
+      // TRUE GHOST SYNC: Aktivera realtids-prenumeration
+      if (isCloudSyncEnabled) {
+        const subscription = cloudSyncService.subscribeToProject(
+          currentProject.name,
+          session.user.id,
+          async (cloudFile) => {
+            // Echo-skydd: Om koden i molnet är likadan som den vi har i editorn, gör inget
+            if (activeFileName === cloudFile.file_path && code === cloudFile.content) {
+              return;
+            }
+
+            console.log(`Ghost Sync Event: ${cloudFile.file_path} updated.`);
+            setSyncStatus('syncing');
+            
+            await cloudSyncService.syncCloudToLocal(
+              currentProject.name,
+              fileEntries,
+              (path, content) => {
+                if (activeFileName === path) setCode(content);
+              },
+              cloudFile
+            );
+            
+            setSyncStatus('synced');
+            addLog('SUCCESS', `Ghost Sync: ${cloudFile.file_path} uppdaterad från molnet.`);
+          }
+        );
+
+        return () => {
+          subscription.unsubscribe();
+        };
+      }
     }
-  }, [session, currentProject?.id]); // Körs när projektet eller sessionen ändras
+  }, [session, currentProject?.id, isCloudSyncEnabled]); // Körs när projektet, sessionen eller synk-inställningen ändras
 
   const updateAvailableFunctions = async () => {
     const functions: string[] = [];
@@ -1318,15 +1351,37 @@ function App() {
             onClose={() => setIsCloudExplorerOpen(false)}
             onImport={async (name, files) => {
               setSyncStatus('syncing');
-              addLog('SYSTEM', `Påbörjar import av "${name}"...`);
+              addLog('SYSTEM', `Förbereder import av "${name}" (${files.length} filer)...`);
 
+              let targetDir = directoryHandle;
+
+              // SMART CLONE: Fråga användaren om de vill skapa ett nytt projekt eller lägga till i det nuvarande
               if (directoryHandle) {
+                const createNew = confirm(`Vill du skapa ett NYTT PROJEKT för "${name}"?\n\nKlicka OK för att välja en ny mapp.\nKlicka Avbryt för att lägga till filerna i ditt nuvarande projekt (${directoryHandle.name}).`);
+                
+                if (createNew) {
+                  try {
+                    const newHandle = await openDirectory();
+                    targetDir = newHandle;
+                    setDirectoryHandle(newHandle);
+                    addLog('SYSTEM', `Byter till nytt projekt: ${newHandle.name}`);
+                  } catch (err) {
+                    addLog('WARNING', 'Ingen ny mapp valdes. Fortsätter med nuvarande projekt.');
+                  }
+                }
+              }
+
+              if (targetDir) {
                 // SPARA TILL DISK: Rekursivt skapande av filer och mappar
                 try {
+                  addLog('SYSTEM', `Börjar skriva filer till disken...`);
+                  
+                  let count = 0;
                   for (const file of files) {
+                    count++;
                     const pathParts = file.path.split('/');
                     const fileName = pathParts.pop()!;
-                    let currentDir = directoryHandle;
+                    let currentDir = targetDir;
 
                     // Skapa undermappar om de inte finns
                     for (const folderName of pathParts) {
@@ -1334,15 +1389,24 @@ function App() {
                     }
 
                     // Skapa och skriv filen (hanterar både text och Blob)
-                    const fileHandle = await createNewFile(currentDir, fileName);
-                    await writeFileContent(fileHandle, file.content);
+                    try {
+                      const fileHandle = await createNewFile(currentDir, fileName);
+                      await writeFileContent(fileHandle, file.content);
+                    } catch (fileErr) {
+                      console.error(`Kunde inte skriva filen ${file.path}:`, fileErr);
+                    }
+
+                    // Rapportera framsteg var 10:e fil
+                    if (count % 10 === 0 || count === files.length) {
+                      addLog('SYSTEM', `Framsteg: ${count}/${files.length} filer sparade...`);
+                    }
                   }
                   
                   await refreshFileSystem();
-                  addLog('SUCCESS', `Projektet "${name}" har klonats till din dator!`);
+                  addLog('SUCCESS', `Projektet "${name}" är nu klart och sparat på din dator!`);
                 } catch (err) {
                   console.error('Kunde inte spara till disk:', err);
-                  addLog('ERROR', 'Kunde inte spara alla filer till din hårddisk.');
+                  addLog('ERROR', 'Ett fel uppstod när filer skrevs till disk. Kontrollera behörigheter.');
                 }
               } else {
                 // VIRTUELLT LÄGE: Endast i minnet

@@ -20,6 +20,9 @@ export class BlobManager {
     for (const entry of entries) {
       const path = currentPath ? `${currentPath}/${entry.name}` : entry.name;
       
+      // Ignorera temporära swap-filer från webbläsaren (.crswap)
+      if (entry.name.endsWith('.crswap')) continue;
+
       if (entry.kind === 'file') {
         try {
           const content = await readFileContent(entry.handle as FileSystemFileHandle);

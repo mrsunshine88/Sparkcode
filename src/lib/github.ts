@@ -58,73 +58,112 @@ export class GitHubService {
     const files: GitHubFile[] = [];
 
     if (Array.isArray(data)) {
-      for (const item of data) {
-        if (item.type === 'file') {
-          try {
-            const fileData = await this.fetchFile(item.url, item.name);
-            files.push(fileData);
-          } catch (err) {
-            console.error(`Skipping file ${item.path} due to error:`, err);
-          }
-        } else if (item.type === 'dir') {
-          const subFiles = await this.fetchRepoContents(owner, repo, item.path);
-          files.push(...subFiles);
-        }
+      // Separera filer och mappar
+      const fileItems = data.filter(item => item.type === 'file');
+      const dirItems = data.filter(item => item.type === 'dir');
+
+      // Parallell hämtning av filer i denna mapp (Batchad för stabilitet)
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < fileItems.length; i += BATCH_SIZE) {
+        const batch = fileItems.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(item => this.fetchFile(item.url, item.name, (item as any).download_url))
+        );
+        files.push(...batchResults.filter((f): f is GitHubFile => f !== null));
+      }
+
+      // Rekursiv hämtning av undermappar
+      for (const dir of dirItems) {
+        const subFiles = await this.fetchRepoContents(owner, repo, dir.path);
+        files.push(...subFiles);
       }
     }
 
     return files;
   }
 
-  private async fetchFile(url: string, fileName: string): Promise<GitHubFile> {
+  private async fetchFile(url: string, fileName: string, downloadUrl?: string): Promise<GitHubFile | null> {
     if (!this.octokit) throw new Error('GitHub not initialized');
     
-    const response = await this.octokit.request(`GET ${url}`);
-    const b64Content = response.data.content?.replace(/\s/g, '') || '';
-    
-    if (!b64Content) {
-      throw new Error(`Inget innehåll i: ${fileName}`);
-    }
+    try {
+      const response = await this.octokit.request(`GET ${url}`);
+      let b64Content = response.data.content?.replace(/\s/g, '') || '';
+      
+      // FALLBACK: Om filen är över 1MB returneras inget content via API:et. 
+      // Då försöker vi ladda ner den direkt via download_url.
+      if (!b64Content && downloadUrl) {
+        console.log(`Hämtar stor fil via direktlänk: ${fileName}...`);
+        const dlResp = await fetch(downloadUrl);
+        const buffer = await dlResp.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        
+        const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp', '.apk'];
+        const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
 
-    // Kolla om det är en bild/binär fil baserat på filändelsen
-    const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp'];
-    const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
-
-    if (isBinary) {
-      // Hantera som binär Blob
-      const binaryString = atob(b64Content);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+        if (isBinary) {
+          return {
+            path: response.data.path,
+            content: new Blob([bytes], { type: this.getMimeType(fileName) }),
+            isBinary: true
+          };
+        } else {
+          const text = new TextDecoder('utf-8').decode(bytes);
+          return {
+            path: response.data.path,
+            content: text,
+            isBinary: false
+          };
+        }
       }
-      const mimeType = this.getMimeType(fileName);
-      return {
-        path: response.data.path,
-        content: new Blob([bytes], { type: mimeType }),
-        isBinary: true
-      };
-    } else {
-      // Hantera som UTF-8 text (Robust metod med TextDecoder som fixar URI-fel)
-      try {
+
+      if (!b64Content) {
+        console.warn(`Inget innehåll i: ${fileName} och ingen download_url hittades.`);
+        return null;
+      }
+
+      // Kolla om det är en bild/binär fil baserat på filändelsen
+      const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.svg', '.webp', '.apk'];
+      const isBinary = binaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+
+      if (isBinary) {
+        // Hantera som binär Blob
         const binaryString = atob(b64Content);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        const text = new TextDecoder('utf-8').decode(bytes);
+        const mimeType = this.getMimeType(fileName);
         return {
           path: response.data.path,
-          content: text,
-          isBinary: false
+          content: new Blob([bytes], { type: mimeType }),
+          isBinary: true
         };
-      } catch (err) {
-        console.warn(`TextDecoder misslyckades för ${fileName}, returnerar rå-sträng.`, err);
-        return {
-          path: response.data.path,
-          content: atob(b64Content),
-          isBinary: false
-        };
+      } else {
+        // Hantera som UTF-8 text (Robust metod med TextDecoder som fixar URI-fel)
+        try {
+          const binaryString = atob(b64Content);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const text = new TextDecoder('utf-8').decode(bytes);
+          return {
+            path: response.data.path,
+            content: text,
+            isBinary: false
+          };
+        } catch (err) {
+          console.warn(`TextDecoder misslyckades för ${fileName}, returnerar rå-sträng.`, err);
+          return {
+            path: response.data.path,
+            content: atob(b64Content),
+            isBinary: false
+          };
+        }
       }
+    } catch (err) {
+      console.error(`Fel vid hämtning av ${fileName}:`, err);
+      return null;
     }
   }
 

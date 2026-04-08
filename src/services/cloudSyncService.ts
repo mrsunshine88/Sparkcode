@@ -60,8 +60,8 @@ export const cloudSyncService = {
    * Automatiskt synkroniserar moln-filer till den lokala mappen på datorn.
    * Går igenom alla filer i molnet och skriver ner dem lokalt.
    */
-  async syncCloudToLocal(projectName: string, fileEntries: any[], onFileUpdated: (path: string, content: string) => void) {
-    const cloudFiles = await this.fetchProjectFiles(projectName);
+  async syncCloudToLocal(projectName: string, fileEntries: any[], onFileUpdated: (path: string, content: string) => void, singleFile?: CloudFile) {
+    const cloudFiles = singleFile ? [singleFile] : await this.fetchProjectFiles(projectName);
     if (!cloudFiles.length) return;
 
     for (const cloudFile of cloudFiles) {
@@ -83,6 +83,30 @@ export const cloudSyncService = {
         onFileUpdated(cloudFile.file_path, cloudFile.content);
       }
     }
+  },
+
+  /**
+   * Prenumererar på realtidsändringar för ett projekt.
+   */
+  subscribeToProject(projectName: string, userId: string, onUpdate: (file: CloudFile) => void) {
+    return supabase
+      .channel(`project-sync-${projectName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'file_sync',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          const file = payload.new as CloudFile;
+          if (file && file.project_name === projectName) {
+            onUpdate(file);
+          }
+        }
+      )
+      .subscribe();
   },
 
   /**
