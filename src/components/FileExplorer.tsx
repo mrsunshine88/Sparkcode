@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Folder, File, FileCode, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { Folder, File, FileCode, Plus, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import type { FileEntry } from '../lib/fileSystem';
 
 interface FileExplorerProps {
   entries: FileEntry[];
   onFileSelect: (handle: FileSystemFileHandle) => void;
   onNewFile: () => void;
+  onDelete: (name: string) => void;
 }
 
-const FileExplorer: React.FC<FileExplorerProps> = ({ entries, onFileSelect, onNewFile }) => {
+const FileExplorer: React.FC<FileExplorerProps> = ({ entries, onFileSelect, onNewFile, onDelete }) => {
   return (
     <div className="file-explorer">
       <div className="explorer-header">
@@ -19,7 +20,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ entries, onFileSelect, onNe
       </div>
       <div className="explorer-content">
         {entries.map((entry) => (
-          <FileNode key={entry.name} entry={entry} onFileSelect={onFileSelect} />
+          <FileNode key={entry.name} entry={entry} onFileSelect={onFileSelect} onDelete={onDelete} />
         ))}
       </div>
     </div>
@@ -29,10 +30,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ entries, onFileSelect, onNe
 interface FileNodeProps {
   entry: FileEntry;
   onFileSelect: (handle: FileSystemFileHandle) => void;
+  onDelete: (name: string) => void;
   depth?: number;
 }
 
-const FileNode: React.FC<FileNodeProps> = ({ entry, onFileSelect, depth = 0 }) => {
+const FileNode: React.FC<FileNodeProps> = ({ entry, onFileSelect, onDelete, depth = 0 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleClick = () => {
@@ -41,6 +43,11 @@ const FileNode: React.FC<FileNodeProps> = ({ entry, onFileSelect, depth = 0 }) =
     } else {
       onFileSelect(entry.handle as FileSystemFileHandle);
     }
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(entry.name);
   };
 
   const getIcon = () => {
@@ -63,6 +70,12 @@ const FileNode: React.FC<FileNodeProps> = ({ entry, onFileSelect, depth = 0 }) =
         <span className="node-icon">{getIcon()}</span>
         {entry.kind === 'directory' && <Folder size={14} className="folder-icon" />}
         <span className="node-name">{entry.name}</span>
+        
+        {entry.kind === 'file' && (
+          <button className="delete-node-btn" onClick={handleDelete} title="Radera fil">
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
       
       {entry.kind === 'directory' && isExpanded && entry.children && (
@@ -72,6 +85,7 @@ const FileNode: React.FC<FileNodeProps> = ({ entry, onFileSelect, depth = 0 }) =
               key={child.name} 
               entry={child} 
               onFileSelect={onFileSelect} 
+              onDelete={onDelete}
               depth={depth + 1} 
             />
           ))}

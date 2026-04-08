@@ -128,13 +128,23 @@ export class GitHubService {
   }
 
   private async fetchFileContent(url: string): Promise<string> {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `token ${this.octokit?.auth}`
-      }
-    });
-    const data = await response.json();
-    return decodeURIComponent(escape(atob(data.content.replace(/\n/g, ''))));
+    if (!this.octokit) throw new Error('GitHub not initialized');
+    
+    // Använd Octokit.request istället för manuell fetch för att hantera auth korrekt
+    const response = await this.octokit.request(`GET ${url}`);
+    const data = response.data;
+    
+    if (!data.content) {
+      throw new Error(`Kunde inte hämta innehåll från: ${url}`);
+    }
+
+    // Robust Base64-avkodning som hanterar UTF-8 och svenska tecken
+    return decodeURIComponent(
+      atob(data.content.replace(/\s/g, ''))
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
   }
 }
 

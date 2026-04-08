@@ -184,12 +184,13 @@ function App() {
   const qualityScore = calculateQuality();
   const topError = errors[0];
 
-  // Auto-save till lokala filen om vald
+  // Auto-save till lokala filen om vald (Spara alltid, även om ogiltig kod - för att förhindra dataförlust)
   useEffect(() => {
-    if (activeFileHandle && isValid) {
+    if (activeFileHandle) {
       const saveTimeout = setTimeout(() => {
         writeFileContent(activeFileHandle, code)
           .then(async () => {
+            setSavedCode(code); // Markera som sparad
             // Uppdatera Blobs för projektet så att Preview hänger med
             await blobManager.refreshBlobs(fileEntries);
             setPreviewVersion(v => v + 1);
@@ -210,7 +211,7 @@ function App() {
       }, 1000);
       return () => clearTimeout(saveTimeout);
     }
-  }, [code, activeFileHandle, isValid, fileEntries]);
+  }, [code, activeFileHandle, fileEntries]);
 
   useEffect(() => {
     if (session && currentProject && activeFileName && code.trim() && isCloudSyncEnabled) {
@@ -328,6 +329,49 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [directoryHandle]);
 
+  const refreshFileSystem = async () => {
+    if (!directoryHandle) return;
+    try {
+      const entries = await readDirectory(directoryHandle);
+      setFileEntries(entries);
+      
+      // Kolla om den aktiva filen har ändrats på disken (extern edit)
+      if (activeFileHandle) {
+        const diskContent = await readFileContent(activeFileHandle);
+        // Uppdatera endast om koden på disken är nyare OCH användaren inte har gjort egna ändringar i editorn
+        if (diskContent !== code && code === savedCode) {
+          setCode(diskContent);
+          setSavedCode(diskContent);
+          addLog('SYSTEM', `Extern ändring upptäckt i ${activeFileName}: Editorn uppdaterad.`);
+        }
+      }
+      
+      // Uppdatera Blobs
+      await blobManager.refreshBlobs(entries);
+      setPreviewVersion(v => v + 1);
+    } catch (err) {
+      console.error('Kunde inte uppdatera filsystemet:', err);
+    }
+  };
+
+  // Fokus-övervakning för att hitta nya filer/mappar automatiskt
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('Fönstret fick fokus: Uppdaterar filsystemet...');
+      refreshFileSystem();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    
+    // Heartbeat: Kolla även var 15:e sekund för säkerhets skull
+    const interval = setInterval(refreshFileSystem, 15000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [directoryHandle, activeFileHandle, code, savedCode, activeFileName]);
+
   const handleConnectDirectory = async () => {
     try {
       const handle = await openDirectory();
@@ -336,9 +380,20 @@ function App() {
       setFileEntries(entries);
       
       // Spara projekt i historiken
-      const saved = await projectRegistry.saveProject(handle);
+      const saved = await projectRegistry.registerProject(handle.name, handle);
       setCurrentProject(saved);
-      projectRegistry.getRecentProjects().then(setRecentProjects);
+      addLog('SYSTEM', `Ansluten till: ${handle.name}`);
+      setRecentProjects(projectRegistry.getRecentProjects());
+      
+      // AUTO-SELECT: Om index.html finns, öppna den direkt
+      const indexFile = entries.find(e => e.name.toLowerCase() === 'index.html');
+      if (indexFile && indexFile.kind === 'file') {
+        handleFileSelect(indexFile.handle as FileSystemFileHandle);
+      } else if (entries.length > 0) {
+        // Annars öppna den första filen
+        const firstFile = entries.find(e => e.kind === 'file');
+        if (firstFile) handleFileSelect(firstFile.handle as FileSystemFileHandle);
+      }
 
       // Initiera Blobs för hela projektet
       await blobManager.refreshBlobs(entries);
@@ -361,6 +416,14 @@ function App() {
 
   const handleFileSelect = async (handle: FileSystemFileHandle) => {
     try {
+      // FORCE SAVE: Om vi byter fil och har osparad kod, spara den gamla filen NU
+      if (activeFileHandle && code !== savedCode) {
+        setSyncStatus('syncing');
+        await writeFileContent(activeFileHandle, code);
+        setSavedCode(code);
+        setSyncStatus('synced');
+      }
+
       const content = await readFileContent(handle);
       setActiveFileHandle(handle);
       setActiveFileName(handle.name);
@@ -427,6 +490,29 @@ function App() {
       } catch (err) {
         console.error('Kunde inte skapa filen:', err);
       }
+    }
+  };
+
+  const handleDeleteFile = async (name: string) => {
+    if (!directoryHandle) return;
+    if (!confirm(`Är du säker på att du vill radera ${name}? Detta går inte att ångra.`)) return;
+
+    try {
+      await (directoryHandle as any).removeEntry(name);
+      const entries = await readDirectory(directoryHandle);
+      setFileEntries(entries);
+
+      // Stäng fliken om den är öppen
+      if (activeFileName === name) {
+        handleCloseTab(name);
+      } else {
+        setOpenFiles(prev => prev.filter(f => f.name !== name));
+      }
+
+      addLog('SYSTEM', `Raderade fil: ${name}`);
+    } catch (err) {
+      console.error('Kunde inte radera filen:', err);
+      alert('Kunde inte radera filen.');
     }
   };
 
@@ -909,6 +995,7 @@ function App() {
           entries={fileEntries} 
           onFileSelect={handleFileSelect} 
           onNewFile={handleCreateNewFile}
+          onDelete={handleDeleteFile}
         />
 
         <section className={`editor-pane ${activeTab === 'terminal' ? 'active' : ''}`}>
