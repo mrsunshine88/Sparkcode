@@ -8,6 +8,7 @@ export interface CloudFile {
   file_path: string;
   content: string;
   updated_at: string;
+  timestamp?: number;
 }
 
 export const cloudSyncService = {

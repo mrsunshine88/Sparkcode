@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, 
   GitBranch, PlusSquare, History as HistoryIcon, X, Info, Globe, Settings, Lock, Download
@@ -113,6 +113,7 @@ function App() {
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
   const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
+  const lastLocalChangeTimeRef = useRef<number>(0);
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -256,21 +257,22 @@ function App() {
   }, [session]);
 
   useEffect(() => {
-    // Endast pusha om ändringen är lokal (Anti-Eko skydd)
+    // Endast pusha om ändringen är lokal (Anti-Eko skydd 3.0)
+    // Vi kollar både källan OCH om koden faktiskt skiljer sig från det vi vet finns i molnet
     if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
       
-      // OPTIMERING: Om koden i editorn redan matchar det vi senast fick från molnet, skicka inte
       if (code === savedCode) return;
 
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
           // DUBBEL-SÄNDNING: Skicka broadcast för hastighet, databas för lagring
-          cloudSyncService.sendBroadcast(currentProject.name, {
+          await cloudSyncService.sendBroadcast(currentProject.name, {
             project_name: currentProject.name,
             file_path: activeFileName,
             content: code,
-            user_id: session.user.id
+            user_id: session.user.id,
+            timestamp: Date.now() // Lägg till tidsstämpel för Anti-Eko 3.0
           });
 
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
@@ -280,7 +282,7 @@ function App() {
           console.error('Cloud Sync Error:', err);
           setSyncStatus('error');
         }
-      }, 400); // TURBO-SYNC: 400ms istället för 2000ms
+      }, 400); 
       return () => clearTimeout(syncTimeout);
     } else if (!isCloudSyncEnabled) {
       setSyncStatus('idle');
@@ -316,17 +318,20 @@ function App() {
                 currentProject.name,
                 session.user.id,
                 async (cloudFile) => {
-                  // Echo-skydd: Om koden i molnet är likadan som den vi har i editorn, gör inget
-                  if (activeFileName === cloudFile.file_path && code === cloudFile.content) {
+                  // ANTI-EKO 3.0: Om fjärr-meddelandet är äldre än vår senaste lokala ändring, ignorera det
+                  // (Detta händer om vi skriver snabbare än nätverket hinner med)
+                  const remoteTimestamp = (cloudFile as any).timestamp || 0;
+                  if (remoteTimestamp > 0 && remoteTimestamp < lastLocalChangeTimeRef.current) {
+                    console.log('🛡 Anti-Eko 3.0: Ignorerar gammalt fjärr-meddelande.');
                     return;
                   }
-      
+
                   // UI-ONLY SYNC: För aktiv fil uppdaterar vi bara state ögonblickligen.
-                  // Disk-skrivningen sker i bakgrunden via Auto-Save timern (1s efter stopp).
                   if (activeFileName === cloudFile.file_path) {
-                    setLastChangeSource('remote');
+                    // Vi sätter savedCode FÖRST för att blockera den lokala pushen omedelbart
+                    setSavedCode(cloudFile.content);
                     setCode(cloudFile.content);
-                    setSavedCode(cloudFile.content); // Detta stoppar "push back"
+                    setLastChangeSource('remote');
                   }
                   
                   // Uppdatera virtuella fileEntries i bakgrunden
@@ -1283,6 +1288,7 @@ function App() {
                   isVimMode={isVimMode}
                   onChange={(val) => {
                     if (val !== undefined) {
+                      lastLocalChangeTimeRef.current = Date.now();
                       setLastChangeSource('local');
                       setCode(val);
                     }
