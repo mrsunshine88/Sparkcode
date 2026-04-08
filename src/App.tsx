@@ -76,6 +76,7 @@ function App() {
   const [isDiffMode, setIsDiffMode] = useState(false);
   const [isVimMode, setIsVimMode] = useState(false);
   const [savedCode, setSavedCode] = useState<string>('');
+  const [cloudSyncedCode, setCloudSyncedCode] = useState<string>('');
   const [projectToRestore, setProjectToRestore] = useState<ProjectMetadata | null>(null);
 
   // Learn from Scratch state
@@ -279,8 +280,8 @@ function App() {
   // Moln-synk: Skicka ändringar till molnet (Ultra-Lightweight)
   useEffect(() => {
     if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
-      // Om koden redan matchar molnet/disk-staten, skicka inget (Stoppar Eko)
-      if (code === savedCode) return;
+      // Om koden redan matchar molnet, skicka inget (Stoppar Eko)
+      if (code === cloudSyncedCode) return;
       
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
@@ -293,7 +294,7 @@ function App() {
           });
 
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
-          setSavedCode(code); // Uppdatera lokala spärren
+          setCloudSyncedCode(code); // Uppdatera moln-spärren
           setSyncStatus('synced');
           setTimeout(() => setSyncStatus('idle'), 2000);
         } catch (err) {
@@ -305,7 +306,7 @@ function App() {
 
       return () => clearTimeout(syncTimeout);
     }
-  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, savedCode]);
+  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, cloudSyncedCode]);
 
   // 1. Initial Auto-Pull (Körs bara EN gång när projektet öppnas)
   useEffect(() => {
@@ -322,6 +323,7 @@ function App() {
                 const finalContent = backup || content;
                 setCode(finalContent);
                 setSavedCode(finalContent);
+                setCloudSyncedCode(finalContent); // Moln-vakt synkad vid start
               }
             }
           );
@@ -347,8 +349,11 @@ function App() {
           // BLIXTSNABB UPDATE (UI-PRIO)
           if (activeFileName === cloudFile.file_path) {
             setLastChangeSource('remote');
-            setSavedCode(cloudFile.content);
-            setCode(cloudFile.content);
+            setCloudSyncedCode(cloudFile.content); // Muta moln-eko omedelbart
+            setCode(cloudFile.content); // Skärmen uppdateras direkt
+            
+            // OBS: Vi uppdaterar INTE savedCode här.
+            // Detta gör att Auto-Save timern (för hårddisken) förstår att den behöver spara till disk.
           }
           
           // Uppdatera virtuell lista i bakgrunden (Utan att trigga om synken)
