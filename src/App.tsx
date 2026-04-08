@@ -336,19 +336,31 @@ function App() {
                       return e;
                     }));
                   } else {
-                    // Annars synkar vi ner till hårddisken som vanligt
+                    // Annars synkar vi ner till hårddisken
                     setLastChangeSource('remote');
-                    await cloudSyncService.syncCloudToLocal(
-                      currentProject.name,
-                      fileEntries,
-                      (path, content) => {
-                        if (activeFileName === path) {
-                          setCode(content);
-                          setSavedCode(content);
-                        }
-                      },
-                      cloudFile
-                    );
+
+                    if (activeFileName === cloudFile.file_path) {
+                      // OPTIMERING: För den aktiva filen uppdaterar vi bara UI och minne för blixtsnabb respons.
+                      // Hårddisk-skrivningen sker automatiskt via Auto-Save timern i App.tsx (1 sek).
+                      console.log(`Blixtsnabb UI-uppdatering för aktiv fil: ${cloudFile.file_path}`);
+                      setCode(cloudFile.content);
+                      setSavedCode(cloudFile.content);
+                    } else {
+                      // Bakgrundsfiler skrivs till disk som vanligt
+                      await cloudSyncService.syncCloudToLocal(
+                        currentProject.name,
+                        fileEntries,
+                        (path, content) => {
+                          // Detta anropas sällan här då vi redan kollat activeFileName ovan, 
+                          // men vi behåller logiken för säkerhets skull.
+                          if (activeFileName === path) {
+                            setCode(content);
+                            setSavedCode(content);
+                          }
+                        },
+                        cloudFile
+                      );
+                    }
                   }
                   
                   setSyncStatus('synced');
