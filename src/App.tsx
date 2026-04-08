@@ -93,7 +93,6 @@ function App() {
   const [isCloudExplorerOpen, setIsCloudExplorerOpen] = useState(false);
   const [cloudExplorerInitialTab, setCloudExplorerInitialTab] = useState<'MOLN' | 'GITHUB'>('MOLN');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isVirtualMode] = useState(false);
   const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(() => {
     return localStorage.getItem('sparkcode_cloud_sync_enabled') !== 'false';
   });
@@ -1191,7 +1190,10 @@ function App() {
                   isVimMode={isVimMode}
                   onChange={(val) => val !== undefined && setCode(val)} 
                   options={{
-                    onMount: (editor: any) => setEditorInstance(editor)
+                    onMount: (editor: any) => {
+                      setEditorInstance(editor);
+                      if (onInstance) onInstance(editor);
+                    }
                   }}
                   fileName={activeFileName}
                   onSave={saveCurrentFile}

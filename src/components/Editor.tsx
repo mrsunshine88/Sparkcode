@@ -38,6 +38,10 @@ interface CodeEditorProps {
   onChange: (value: string | undefined) => void;
   language?: string;
   options?: any;
+  fileName?: string;
+  onSave?: () => void;
+  onSearchSelection?: () => void;
+  onInstance?: (editor: any) => void;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({ 
@@ -47,7 +51,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   isVimMode = false,
   onChange, 
   language = 'html', 
-  options = {} 
+  options = {},
+  fileName,
+  onSave,
+  onSearchSelection,
+  onInstance
 }) => {
   const vimModeRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
@@ -72,6 +80,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
+    if (onInstance) onInstance(editor);
   };
 
   const commonOptions = {

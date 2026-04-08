@@ -3,11 +3,12 @@ import { Activity, CheckSquare, Terminal } from 'lucide-react';
 
 interface AIErrorPanelProps {
   errors: LintResult[];
-  isValid: boolean;
-  code: string;
+  isValid?: boolean;
+  code?: string;
+  onJump?: (line: number) => void;
 }
 
-const AIErrorPanel: React.FC<AIErrorPanelProps> = ({ errors, isValid, code }) => {
+const AIErrorPanel: React.FC<AIErrorPanelProps> = ({ errors, isValid = false, code = '', onJump }) => {
   const isCodeEmpty = !code.trim() || code.includes('Välj en fil för att börja koda');
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -120,7 +121,16 @@ const AIErrorPanel: React.FC<AIErrorPanelProps> = ({ errors, isValid, code }) =>
 
       <div className="tips-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {errors.map((err, idx) => (
-          <div key={idx} className="error-bubble" style={{ borderLeft: `3px solid ${getSeverityColor(err.severity)}`, background: 'rgba(255,255,255,0.02)' }}>
+          <div 
+            key={idx} 
+            className="error-bubble" 
+            style={{ 
+              borderLeft: `3px solid ${getSeverityColor(err.severity)}`, 
+              background: 'rgba(255,255,255,0.02)',
+              cursor: onJump ? 'pointer' : 'default'
+            }}
+            onClick={() => onJump && onJump(err.line)}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
               <span style={{ fontSize: '0.65rem', fontWeight: 900, color: getSeverityColor(err.severity), textTransform: 'uppercase' }}>
                 {getCategoryLabel(err.category)}
