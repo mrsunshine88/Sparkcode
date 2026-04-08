@@ -112,6 +112,7 @@ function App() {
   const [isBlueprintMode, setIsBlueprintMode] = useState(false);
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
+  const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -245,7 +246,8 @@ function App() {
   }, [code, activeFileHandle, fileEntries]);
 
   useEffect(() => {
-    if (session && currentProject && activeFileName && code.trim() && isCloudSyncEnabled) {
+    // Endast pusha om ändringen är lokal (Anti-Eko skydd)
+    if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
@@ -255,12 +257,12 @@ function App() {
           console.error('Cloud Sync Error:', err);
           setSyncStatus('error');
         }
-      }, 2000); // Tyst auto-push efter 2 sekunder
+      }, 400); // TURBO-SYNC: 400ms istället för 2000ms
       return () => clearTimeout(syncTimeout);
     } else if (!isCloudSyncEnabled) {
       setSyncStatus('idle');
     }
-  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled]);
+  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource]);
 
   // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
   useEffect(() => {
@@ -302,7 +304,9 @@ function App() {
                   // Om vi är i virtuellt läge (ingen mapp ansluten), uppdaterar vi bara lokalt state
                   if (!directoryHandle) {
                     if (activeFileName === cloudFile.file_path) {
+                      setLastChangeSource('remote');
                       setCode(cloudFile.content);
+                      setSavedCode(cloudFile.content);
                     }
                     // Uppdatera virtuella fileEntries så att de har rätt innehåll om man växlar flik
                     setFileEntries(prev => prev.map(e => {
@@ -321,11 +325,15 @@ function App() {
                     }));
                   } else {
                     // Annars synkar vi ner till hårddisken som vanligt
+                    setLastChangeSource('remote');
                     await cloudSyncService.syncCloudToLocal(
                       currentProject.name,
                       fileEntries,
                       (path, content) => {
-                        if (activeFileName === path) setCode(content);
+                        if (activeFileName === path) {
+                          setCode(content);
+                          setSavedCode(content);
+                        }
                       },
                       cloudFile
                     );
@@ -914,7 +922,7 @@ function App() {
           // I en riktig miljö skulle vi här hämta en signerad URL eller aktivera en publik route i Supabase
           // För demonstration skapar vi en trovärdig simulerad länk baserat på projekt-id
           const publicId = btoa(currentProject.name).substring(0, 8).toLowerCase();
-          const publicUrl = `https://sparkcode.app/view/${publicId}`;
+          const publicUrl = `${window.location.origin}/view/${publicId}`;
           
           setTimeout(() => {
             setSyncStatus('synced');
@@ -1211,7 +1219,12 @@ function App() {
                   originalCode={savedCode}
                   isDiffMode={isDiffMode}
                   isVimMode={isVimMode}
-                  onChange={(val) => val !== undefined && setCode(val)} 
+                  onChange={(val) => {
+                    if (val !== undefined) {
+                      setLastChangeSource('local');
+                      setCode(val);
+                    }
+                  }} 
                   onInstance={(editor) => setEditorInstance(editor)}
                   fileName={activeFileName}
                   onSave={saveCurrentFile}
