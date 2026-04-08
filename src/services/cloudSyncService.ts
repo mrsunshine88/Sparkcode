@@ -102,11 +102,33 @@ export const cloudSyncService = {
     }
   },
 
+  activeChannels: new Map<string, any>(),
+
+  /**
+   * Hämtar eller skapar en realtids-kanal för ett projekt.
+   */
+  getChannel(projectName: string) {
+    const channelName = `project-sync-${projectName}`;
+    if (this.activeChannels.has(channelName)) {
+      return this.activeChannels.get(channelName);
+    }
+    
+    const channel = supabase.channel(channelName);
+    this.activeChannels.set(channelName, channel);
+    return channel;
+  },
+
   /**
    * Skickar ett blixtsnabbt broadcast-meddelande till andra enheter.
    */
   async sendBroadcast(projectName: string, fileData: Partial<CloudFile>) {
-    const channel = supabase.channel(`project-sync-${projectName}`);
+    const channel = this.getChannel(projectName);
+    
+    // Om vi inte är prenumerade än, gör det snabbt
+    if (channel.state === 'closed' || channel.state === 'joined') {
+      channel.subscribe();
+    }
+
     return channel.send({
       type: 'broadcast',
       event: 'file_update',
@@ -118,9 +140,15 @@ export const cloudSyncService = {
    * Prenumererar på realtidsändringar (både databas och broadcast).
    */
   subscribeToProject(projectName: string, userId: string, onUpdate: (file: CloudFile) => void) {
-    const channel = supabase.channel(`project-sync-${projectName}`);
+    const channel = this.getChannel(projectName);
     
-    return channel
+    // Rensa eventuella gamla handlers för att undvika dubbla anrop
+    channel.unsubscribe(); 
+    
+    const newChannel = supabase.channel(`project-sync-${projectName}`);
+    this.activeChannels.set(`project-sync-${projectName}`, newChannel);
+
+    return newChannel
       .on(
         'postgres_changes',
         {
