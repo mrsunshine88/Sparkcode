@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 interface CloudExplorerProps {
   initialTab?: 'MOLN' | 'GITHUB';
   onClose: () => void;
-  onImport: (projectName: string, files: {path: string, content: string | Blob}[]) => void;
+  onImport: (projectName: string, files: {path: string, content: string | Blob}[], isCloudSync: boolean) => void;
 }
 
 export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN', onClose, onImport }) => {
@@ -58,7 +58,7 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
       const cloudFiles = await cloudSyncService.fetchProjectFiles(name);
       // Konvertera till standardformat {path, content}
       const files = cloudFiles.map(f => ({ path: f.file_path, content: f.content }));
-      onImport(name, files);
+      onImport(name, files, true);
       onClose();
     } catch (err) {
       setError('Import misslyckades.');
@@ -75,7 +75,7 @@ export const CloudExplorer: React.FC<CloudExplorerProps> = ({ initialTab = 'MOLN
         repo.full_name.split('/')[0],
         repo.name
       );
-      onImport(repo.name, files);
+      onImport(repo.name, files, false);
       onClose();
     } catch (err) {
       setError('Import från GitHub misslyckades.');

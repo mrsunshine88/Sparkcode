@@ -7,9 +7,23 @@ export interface LintResult {
   severity: 'error' | 'warning' | 'tip';
 }
 
+const VALID_HTML_TAGS = new Set([
+  'html', 'head', 'title', 'base', 'link', 'meta', 'style', 'script', 'noscript', 'template',
+  'body', 'section', 'nav', 'article', 'aside', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'header', 'footer', 'address', 'main', 'p', 'hr', 'pre', 'blockquote', 'ol', 'ul', 'li',
+  'dl', 'dt', 'dd', 'figure', 'figcaption', 'div', 'a', 'em', 'strong', 'small', 's', 'cite',
+  'q', 'dfn', 'abbr', 'data', 'time', 'code', 'var', 'samp', 'kbd', 'sub', 'sup', 'i', 'b',
+  'u', 'mark', 'ruby', 'rt', 'rp', 'bdi', 'bdo', 'span', 'br', 'wbr', 'ins', 'del', 'img',
+  'iframe', 'embed', 'object', 'param', 'video', 'audio', 'source', 'track', 'canvas', 'map',
+  'area', 'svg', 'math', 'table', 'caption', 'colgroup', 'col', 'tbody', 'thead', 'tfoot',
+  'tr', 'td', 'th', 'form', 'fieldset', 'legend', 'label', 'input', 'button', 'select',
+  'datalist', 'optgroup', 'option', 'textarea', 'keygen', 'output', 'progress', 'meter',
+  'details', 'summary', 'menu', 'menuitem', 'dialog'
+]);
+
 /**
- * Mentor Linter (Direct & Concise Edition)
- * Ger korta, pedagogiska instruktioner för att vägleda utvecklaren.
+ * Super Mentor HTML Linter (Syntax Shield Edition)
+ * Analyserar HTML för både struktur och strikt syntax (tecken, ord).
  */
 export const lintHTML = (code: string): LintResult[] => {
   const results: LintResult[] = [];
@@ -17,42 +31,25 @@ export const lintHTML = (code: string): LintResult[] => {
   
   if (!trimmedCode) return results;
 
-  // --- DIREKT KONTROLL: Saknad struktur ---
-  const hasTags = /<[a-z][\s\S]*>/i.test(trimmedCode);
-  const isGibberish = trimmedCode.length > 0 && !hasTags;
-
-  if (isGibberish) {
-    results.push({
-      line: 1,
-      category: 'STRUCTURE',
-      severity: 'error',
-      message: `Du behöver tillföra struktur på din sida. Börja med att lägga till en rubrik (t.ex. <h1>) eller en <main>-tagg.`
-    });
-    return results;
-  }
-
   const lines = code.split('\n');
   const stack: { tag: string; line: number }[] = [];
-  const tagRegex = /<(\/?)([a-z1-6]+)([^>]*)>/gi;
+  const tagRegex = /<(\/?)([a-z1-6_-]+)([^>]*)>/gi;
   const ids = new Set<string>();
   
   let h1Count = 0;
   let lastHeaderLevel = 0;
-  let divCount = 0;
-  let hasMain = false;
   let match: RegExpExecArray | null;
 
   for (let i = 0; i < lines.length; i++) {
     const lineContent = lines[i];
-    // --- EXTRA KONTROLL: Malformerade taggar (t.ex. <style<) ---
-    const brokenTagMatch = lineContent.match(/<([a-z1-6]+)</i);
-    if (brokenTagMatch) {
-      const tagName = brokenTagMatch[1].toLowerCase();
+
+    // --- TEKEN-PATRULL: Malformerade taggar ---
+    if (/<[a-z1-6]+</i.test(lineContent)) {
       results.push({
         line: i + 1,
         category: 'STRUCTURE',
         severity: 'error',
-        message: `Det ser ut som att du råkat skriva < istället för > i slutet av din tagg. Den ska se ut så här: <${tagName}>.`
+        message: `Det ser ut som att du råkat skriva < istället för > i slutet av din tagg.`
       });
     }
 
@@ -61,52 +58,39 @@ export const lintHTML = (code: string): LintResult[] => {
       const tagName = match[2].toLowerCase();
       const attributes = match[3];
 
+      // --- STAVNINGS-SKYDD: Kontrollera mot ordlista ---
+      if (!VALID_HTML_TAGS.has(tagName)) {
+         results.push({
+          line: i + 1,
+          category: 'ERROR',
+          severity: 'error',
+          message: `Ogiltig HTML-tagg: "<${tagName}>". Kontrollera stavningen.`
+        });
+      }
+
       if (!isClosing) {
-        if (tagName === 'div') divCount++;
-        if (tagName === 'main') hasMain = true;
-        
         // Rubrik-hierarki
         if (/^h[1-6]$/.test(tagName)) {
           const level = parseInt(tagName[1]);
           if (level === 1) h1Count++;
-          
           if (level > lastHeaderLevel + 1 && lastHeaderLevel !== 0) {
             results.push({
               line: i + 1,
               category: 'STRUCTURE',
               severity: 'warning',
-              message: `Hoppa inte över nivåer i rubrikerna. Använd H${lastHeaderLevel + 1} efter H${lastHeaderLevel} för en korrekt struktur.`
+              message: `Rubriknivåer bör följa efter varandra (t.ex. H1 sen H2).`
             });
           }
           lastHeaderLevel = level;
         }
 
-        // Inline Styles
-        if (attributes.includes('style=')) {
-          results.push({
-            line: i + 1,
-            category: 'BEST_PRACTICE',
-            severity: 'tip',
-            message: `Undvik inline-stilar. Lägg dina stilar i en CSS-fil med klasser (class="...") istället.`
-          });
-        }
-
-        // Tillgänglighet (A11y)
+        // Tillgänglighet
         if (tagName === 'img' && !attributes.includes('alt=')) {
           results.push({
             line: i + 1,
             category: 'A11Y',
             severity: 'error',
-            message: `Lägg till en 'alt'-text på din bild (t.ex. alt="Beskrivning") så att alla kan förstå vad den föreställer.`
-          });
-        }
-
-        if (tagName === 'button' && lineContent.includes('><')) {
-          results.push({
-            line: i + 1,
-            category: 'A11Y',
-            severity: 'warning',
-            message: `En knapp behöver text inuti (t.ex. <button>Klicka här</button>) för att användaren ska förstå vad den gör.`
+            message: `Bilder behöver en 'alt'-text: <img alt="...">.`
           });
         }
 
@@ -119,7 +103,7 @@ export const lintHTML = (code: string): LintResult[] => {
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `ID-namnet "${id}" används redan. Ett ID måste vara helt unikt på sidan.`
+              message: `ID "${id}" används redan. Ett ID måste vara unikt.`
             });
           }
           ids.add(id);
@@ -135,7 +119,7 @@ export const lintHTML = (code: string): LintResult[] => {
             line: i + 1,
             category: 'ERROR',
             severity: 'error',
-            message: `Du försöker stänga </${tagName}> utan att ha öppnat den. Kontrollera stavningen.`
+            message: `Stängningstagg </${tagName}> saknar öppning.`
           });
         } else {
           const last = stack.pop();
@@ -144,7 +128,7 @@ export const lintHTML = (code: string): LintResult[] => {
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `Taggen </${tagName}> stängs i fel ordning. Du behöver stänga <${last?.tag}> först.`
+              message: `Fel ordning: Du stänger </${tagName}> men senast öppnad var <${last?.tag}>.`
             });
           }
         }
@@ -154,32 +138,23 @@ export const lintHTML = (code: string): LintResult[] => {
     }
   }
 
-  // Slutgiltig kontroll
-  if (h1Count > 1) {
-    results.push({
-      line: 1,
-      category: 'STRUCTURE',
-      severity: 'warning',
-      message: `Använd bara en H1-rubrik per sida för att göra det tydligt vad som är den viktigaste rubriken.`
-    });
-  }
-
-  if (divCount > 12 && !hasMain) {
-    results.push({
-      line: 1,
-      category: 'SEMANTIC',
-      severity: 'tip',
-      message: `Försök använda <main>, <section> eller <article> istället för så många <div>-taggar för att ge sidan mer mening.`
-    });
-  }
-
+  // --- SLUT-KONTROLL: Öppna taggar ---
   while (stack.length > 0) {
     const unclosed = stack.pop();
     results.push({
       line: unclosed!.line,
       category: 'ERROR',
       severity: 'error',
-      message: `Taggen <${unclosed!.tag}> är fortfarande öppen. Skriv </${unclosed!.tag}> för att stänga den.`
+      message: `Taggen <${unclosed!.tag}> stängdes aldrig. Skriv </${unclosed!.tag}>.`
+    });
+  }
+
+  if (h1Count > 1) {
+    results.push({
+      line: 1,
+      category: 'STRUCTURE',
+      severity: 'warning',
+      message: `Använd bara en H1-rubrik per sida för bättre ordning.`
     });
   }
 

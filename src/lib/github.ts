@@ -91,12 +91,20 @@ export class GitHubService {
       
       // FALLBACK: Om filen är över 1MB returneras inget content via API:et. 
       // Då försöker vi ladda ner den direkt via download_url.
-      if (!b64Content && downloadUrl) {
-        console.log(`Hämtar stor fil via direktlänk: ${fileName}...`);
+      if (!b64Content) {
+        if (!downloadUrl) {
+          console.warn(`Inget innehåll i: ${fileName} och ingen download_url hittades. Hoppar över.`);
+          return null;
+        }
+
+        console.log(`Hämtar stor fil (>1MB) via direktlänk: ${fileName}...`);
         
         try {
           const dlResp = await fetch(downloadUrl);
-          if (!dlResp.ok) throw new Error(`Fetch failed: ${dlResp.status}`);
+          if (!dlResp.ok) {
+            console.warn(`Kunde inte hämta ${fileName} via direktlänk (Status: ${dlResp.status}). Hoppar över.`);
+            return null;
+          }
           
           const buffer = await dlResp.arrayBuffer();
           const bytes = new Uint8Array(buffer);
@@ -119,14 +127,9 @@ export class GitHubService {
             };
           }
         } catch (fetchErr) {
-          console.warn(`Kunde inte hämta rå-innehåll för ${fileName} (troligen 404):`, fetchErr);
+          console.warn(`Nätverksfel vid hämtning av ${fileName}:`, fetchErr);
           return null;
         }
-      }
-
-      if (!b64Content) {
-        console.warn(`Inget innehåll i: ${fileName} och ingen download_url hittades.`);
-        return null;
       }
 
       // Kolla om det är en bild/binär fil baserat på filändelsen

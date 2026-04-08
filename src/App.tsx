@@ -1003,7 +1003,7 @@ function App() {
             {topError ? (
               <><strong>ADVICE:</strong> {topError.message}</>
             ) : (
-              <><strong>STATUS:</strong> ARCHITECTURE STABLE. PROCEED.</>
+              <><strong>ALLT SER BRA UT:</strong> "Snyggt jobbat! Din kod är korrekt strukturerad."</>
             )}
           </div>
           <button 
@@ -1443,10 +1443,61 @@ function App() {
           <CloudExplorer 
             initialTab={cloudExplorerInitialTab}
             onClose={() => setIsCloudExplorerOpen(false)}
-            onImport={async (name, files) => {
-              // 1. Spara nuvarande jobb
+            onImport={async (name, files, isCloudSync) => {
+              const isFileSystemSupported = 'showDirectoryPicker' in window;
+              
+              // 1. Döda "spöket" direkt (Flicker-fix)
+              localStorage.removeItem('sparkcode_active_project_id');
+              
+              // 2. Spara nuvarande jobb
               await saveCurrentFile();
-              // 2. Töm arbetsytan för en 'Clean Slate'
+              
+              // 2. Intelligent Synk: Samma projekt på Desktop
+              if (isCloudSync && isFileSystemSupported && currentProject?.name === name && directoryHandle) {
+                addLog('SYSTEM', `Synkar "${name}" direkt till nuvarande mapp...`);
+                setIsCloudExplorerOpen(false);
+                
+                try {
+                  for (const file of files) {
+                    const pathParts = file.path.split('/');
+                    const fileName = pathParts.pop()!;
+                    let currentDir = directoryHandle;
+
+                    for (const folderName of pathParts) {
+                      currentDir = await createNewFolder(currentDir, folderName);
+                    }
+
+                    const fileHandle = await createNewFile(currentDir, fileName);
+                    await writeFileContent(fileHandle, file.content as string);
+                  }
+                  await refreshFileSystem();
+                  addLog('SUCCESS', `Synk slutförd för "${name}".`);
+                } catch (err) {
+                  addLog('ERROR', `Synk misslyckades: ${err instanceof Error ? err.message : 'Okänt fel'}`);
+                }
+                return;
+              }
+
+              // 3. Mobil/Moln-läge: Ingen FS support (eller om användaren väljer det)
+              if (!isFileSystemSupported) {
+                addLog('SYSTEM', `Mobil-läge detekterat. Öppnar "${name}" virtuellt...`);
+                setIsCloudExplorerOpen(false);
+                
+                // Töm state och ladda filerna till minnet istället
+                setDirectoryHandle(null);
+                const virtualEntries = files.map(f => ({
+                  name: f.path,
+                  kind: 'file' as const,
+                  handle: null as any // Ingen handle i virtuellt läge
+                }));
+                // Obs: Här skulle vi egentligen behöva en mer robust virtuell filstruktur
+                setFileEntries(virtualEntries);
+                setCode(files[0]?.content as string || '');
+                addLog('SUCCESS', `"${name}" är nu öppet i molnläge.`);
+                return;
+              }
+
+              // 4. Annars: Clean Slate för ny GitHub-klon eller Switch
               setDirectoryHandle(null);
               setFileEntries([]);
               setCode('');
