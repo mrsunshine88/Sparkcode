@@ -115,11 +115,14 @@ export const lintCSS = (code: string): LintResult[] => {
       openBraces = 0;
     }
 
-    // 2. Stavningskontroll egenskaper
-    const propertyMatch = lineContent.match(/^([a-z-]+)\s*:/i);
+    // 2. Stavningskontroll egenskaper (Stödjer indrag och egenskaper efter { eller ;)
+    const propertyMatch = lineContent.match(/(?:^|{|;)\s*([a-z-]+)\s*:/i);
     if (propertyMatch) {
       const property = propertyMatch[1].toLowerCase();
-      if (!VALID_CSS_PROPERTIES.has(property)) {
+      // Om det är en pseudo-selector (t.ex. :hover eller :root), hoppa över
+      if (lineContent.trim().startsWith(':') || property.startsWith('-')) {
+        // Ignorera
+      } else if (!VALID_CSS_PROPERTIES.has(property)) {
         // Försök hitta en nära matchning (pedagogiskt)
         let suggestion = "";
         if (property === 'backgroun' || property === 'backgroun-color') suggestion = "Menade du 'background-color'?";

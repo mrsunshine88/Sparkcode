@@ -168,6 +168,22 @@ function App() {
     // Om ingen fil är aktiv, kör vi standard HTML-linter på editorn
     if (!activeFileName || fileNameLower.endsWith('.html') || fileNameLower === 'index' || fileNameLower === 'test') {
       currentErrors = lintHTML(code);
+      
+      // MENTOR RÖNTGENSYN: Hitta CSS inuti <style>-taggar
+      const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+      let match;
+      while ((match = styleRegex.exec(code)) !== null) {
+        const styleContent = match[1];
+        const styleStartLine = code.substring(0, match.index).split('\n').length;
+        const cssErrors = lintCSS(styleContent);
+        
+        // Mappa om radnummer för CSS-fel till HTML-filens rader
+        const mappedErrors = cssErrors.map(err => ({
+          ...err,
+          line: err.line + styleStartLine - 1
+        }));
+        currentErrors.push(...mappedErrors);
+      }
     } else if (fileNameLower.endsWith('.css')) {
       currentErrors = lintCSS(code);
     }
@@ -1203,6 +1219,48 @@ function App() {
                       </button>
                     </div>
                   </>
+            {directoryHandle || fileEntries.length > 0 ? (
+              <div className="editor-container" style={{ position: 'relative' }}>
+                <CodeEditor 
+                  code={code} 
+                  onChange={setCode}
+                  fileName={activeFileName}
+                  onSave={saveCurrentFile}
+                  onInstance={setEditorInstance}
+                  onSearchSelection={handleSearchSelection}
+                  isVimMode={isVimMode}
+                />
+                
+                {errors.length > 0 && (
+                  <AIErrorPanel 
+                    errors={errors} 
+                    onJump={(line) => {
+                      if (editorInstance) {
+                        editorInstance.revealLineInCenter(line);
+                        editorInstance.setPosition({ lineNumber: line, column: 1 });
+                        editorInstance.focus();
+                      }
+                    }}
+                  />
+                )}
+                
+                <div className="editor-footer">
+                  <div className="file-info shadow-text">
+                    <HistoryIcon size={12} /> LOKAL BACKUP AKTIV
+                  </div>
+                  <div className="selection-info">
+                    {qualityScore}% QUALITY
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state-container">
+                {isVirtualMode ? (
+                  <>
+                    <Zap size={48} className="glow-text animate-pulse" />
+                    <h2 className="glow-text">VIRTUELT ARKIV AKTIVT</h2>
+                    <p style={{ color: 'var(--text-muted)' }}>Synkar filer direkt via molnet. Inget val av lokal mapp krävs.</p>
+                  </>
                 ) : (
                   <>
                     <FolderOpen size={48} color="var(--accent-primary)" />
@@ -1488,11 +1546,24 @@ function App() {
                 const virtualEntries = files.map(f => ({
                   name: f.path,
                   kind: 'file' as const,
-                  handle: null as any // Ingen handle i virtuellt läge
+                  handle: {
+                    name: f.path,
+                    getFile: async () => ({
+                      text: async () => f.content as string
+                    })
+                  } as any
                 }));
-                // Obs: Här skulle vi egentligen behöva en mer robust virtuell filstruktur
+                
                 setFileEntries(virtualEntries);
-                setCode(files[0]?.content as string || '');
+                
+                // Auto-öppna första filen (oftast index.html)
+                const firstFile = virtualEntries.find(e => e.name.toLowerCase().includes('index.html')) || virtualEntries[0];
+                if (firstFile) {
+                  setActiveFileName(firstFile.name);
+                  setActiveFileHandle(firstFile.handle);
+                  setCode(files.find(f => f.path === firstFile.name)?.content as string || '');
+                }
+                
                 addLog('SUCCESS', `"${name}" är nu öppet i molnläge.`);
                 return;
               }
