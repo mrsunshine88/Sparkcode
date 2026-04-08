@@ -26,6 +26,8 @@ import type { FileEntry } from './lib/fileSystem';
 import HistoryTerminal, { type CodeSnapshot } from './components/HistoryTerminal';
 import AIErrorPanel from './components/AIErrorPanel';
 import challenges from './data/challenges.json';
+import { exportProjectToZip } from './utils/projectExporter';
+import { runStructuralAudit } from './utils/auditRobot';
 import type { Session } from '@supabase/supabase-js';
 import * as prettier from 'prettier/standalone';
 import * as prettierHtml from 'prettier/parser-html';
@@ -81,6 +83,17 @@ function App() {
   const [detectedFramework, setDetectedFramework] = useState<string | null>(null);
   const [isServerInputOpen, setIsServerInputOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Hjälpfunktion för att lägga till loggar
+  const addLog = (type: 'SYSTEM' | 'ERROR' | 'WARNING', content: string) => {
+    const newLog: LogEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: type === 'SYSTEM' ? 'info' : type.toLowerCase() as any,
+      content,
+      timestamp: Date.now()
+    };
+    setLogs(prev => [newLog, ...prev].slice(0, 100));
+  };
   
   // Senior Architect Upgrades state
   const [isBlueprintMode, setIsBlueprintMode] = useState(false);
@@ -464,6 +477,14 @@ function App() {
     }
   };
 
+  const handleLogout = async () => {
+    localStorage.removeItem('sparkcode_active_project_id');
+    localStorage.removeItem('sparkcode_active_file_name');
+    setCustomPreviewUrl(null);
+    setDetectedFramework(null);
+    await supabase.auth.signOut();
+  };
+
   const menuItems = [
     { 
       label: 'Öppna mapp...', 
@@ -510,16 +531,20 @@ function App() {
       label: `Vim-läge: ${isVimMode ? 'PÅ' : 'AV'}`,
       icon: <Terminal size={14} />,
       onClick: () => setIsVimMode(!isVimMode)
-    }
+    },
+    { 
+      label: 'EXPORTERA PROJEKT (ZIP)', 
+      onClick: () => {
+        if (currentProject) {
+          exportProjectToZip(fileEntries, currentProject.name);
+          addLog('SYSTEM', `Exporterar projekt: ${currentProject.name}.zip`);
+        } else {
+          addLog('ERROR', 'Inget aktivt projekt hittades för export.');
+        }
+      } 
+    },
+    { label: 'LOGGA UT', onClick: handleLogout }
   ];
-
-  const handleLogout = async () => {
-    localStorage.removeItem('sparkcode_active_project_id');
-    localStorage.removeItem('sparkcode_active_file_name');
-    setCustomPreviewUrl(null);
-    setDetectedFramework(null);
-    await supabase.auth.signOut();
-  };
 
   if (!session) {
     return (
@@ -530,8 +555,34 @@ function App() {
     );
   }
 
+  const handleRunAudit = () => {
+    const iframe = document.querySelector('iframe');
+    if (iframe) {
+      addLog('SYSTEM', 'Arkitekten: Påbörjar djupstruktur-audit...');
+      const report = runStructuralAudit(iframe);
+      
+      addLog('SYSTEM', `Audit resultat: ${report.score}/100 QUALITY.`);
+      
+      if (report.criticalIssues.length > 0) {
+        report.criticalIssues.forEach(issue => addLog('ERROR', `KRITISK: ${issue}`));
+      }
+      if (report.warnings.length > 0) {
+        report.warnings.forEach(w => addLog('WARNING', `VARNING: ${w}`));
+      }
+      if (report.performanceTips.length > 0) {
+        report.performanceTips.forEach(p => addLog('SYSTEM', `TIPS: ${p}`));
+      }
+      
+      if (report.score === 100) {
+        addLog('SYSTEM', 'PERFEKTION! Inga arkitektoniska brister funna. Chefen kommer bli imponerad.');
+      }
+      
+      setIsConsoleOpen(true);
+    }
+  };
+
   return (
-    <div className="app-container">
+    <div className={`app-container ${qualityScore === 100 ? 'achievement-unlocked' : ''}`}>
       <div className="crt-overlay"></div>
       
       <header className="header">
@@ -617,6 +668,9 @@ function App() {
         <div className={`status-badge ${isValid ? 'status-valid' : 'status-invalid'}`}>
           {qualityScore}% QUALITY
         </div>
+        <button className="hacker-button audit-button" onClick={handleRunAudit}>
+          RUN AUDIT
+        </button>
         <div className="status-divider"></div>
         <div className="status-advice">
           {topError ? (
