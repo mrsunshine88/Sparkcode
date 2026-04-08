@@ -103,11 +103,24 @@ export const cloudSyncService = {
   },
 
   /**
-   * Prenumererar på realtidsändringar för ett projekt.
+   * Skickar ett blixtsnabbt broadcast-meddelande till andra enheter.
+   */
+  async sendBroadcast(projectName: string, fileData: Partial<CloudFile>) {
+    const channel = supabase.channel(`project-sync-${projectName}`);
+    return channel.send({
+      type: 'broadcast',
+      event: 'file_update',
+      payload: fileData
+    });
+  },
+
+  /**
+   * Prenumererar på realtidsändringar (både databas och broadcast).
    */
   subscribeToProject(projectName: string, userId: string, onUpdate: (file: CloudFile) => void) {
-    return supabase
-      .channel(`project-sync-${projectName}`)
+    const channel = supabase.channel(`project-sync-${projectName}`);
+    
+    return channel
       .on(
         'postgres_changes',
         {
@@ -119,6 +132,18 @@ export const cloudSyncService = {
         (payload) => {
           const file = payload.new as CloudFile;
           if (file && file.project_name === projectName) {
+            onUpdate(file);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'file_update' },
+        (payload) => {
+          // Blixtsnabb uppdatering via broadcast
+          const file = payload.payload as CloudFile;
+          if (file && file.project_name === projectName) {
+            console.log('⚡️ Broadcast Sync Received:', file.file_path);
             onUpdate(file);
           }
         }

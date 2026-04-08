@@ -262,6 +262,14 @@ function App() {
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
+          // DUBBEL-SÄNDNING: Skicka broadcast för hastighet, databas för lagring
+          cloudSyncService.sendBroadcast(currentProject.name, {
+            project_name: currentProject.name,
+            file_path: activeFileName,
+            content: code,
+            user_id: session.user.id
+          });
+
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
           setSavedCode(code); // Markera att detta innehåll nu är i synk med molnet
           setSyncStatus('synced');
@@ -375,10 +383,25 @@ function App() {
     }
   }, [session, currentProject?.id, isCloudSyncEnabled]); // Körs när projektet, sessionen eller synk-inställningen ändras
 
-  // MOBIL TURBO-SYNK: Hjärtslag för att hålla anslutningen vaken (varje sekund)
+  // MOBIL TURBO-SYNK: Hjärtslag och Wake-Lock för att förhindra throttling
   useEffect(() => {
     if (session && currentProject && isCloudSyncEnabled) {
-      // Skapa en dedikerad "Keep-Alive" kanal
+      // 1. Wake-Lock för att hindra webbläsaren från att somna/strypa trafik
+      let wakeLock: any = null;
+      const requestWakeLock = async () => {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLock = await (navigator as any).wakeLock.request('screen');
+            console.log('Wake Lock: Aktiv (Håller datorn vaken)');
+          }
+        } catch (err) {
+          console.warn('Wake Lock Error:', err);
+        }
+      };
+
+      requestWakeLock();
+
+      // 2. Hjärtslags-puls
       const heartbeatChannel = supabase.channel(`heartbeat-${session.user.id}`);
       
       heartbeatChannel.subscribe(async (status) => {
@@ -399,6 +422,11 @@ function App() {
       return () => {
         clearInterval(interval);
         heartbeatChannel.unsubscribe();
+        if (wakeLock) {
+          wakeLock.release().then(() => {
+            console.log('Wake Lock: Släppt');
+          });
+        }
       };
     }
   }, [session, currentProject, isCloudSyncEnabled]);
