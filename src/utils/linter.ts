@@ -8,8 +8,8 @@ export interface LintResult {
 }
 
 /**
- * Senior Architect HTML Linter (40 Years Experience Edition)
- * Analyserar kod med extrem noggrannhet och noll tolerans för slarv.
+ * Mentor Linter (Direct & Concise Edition)
+ * Ger korta, pedagogiska instruktioner för att vägleda utvecklaren.
  */
 export const lintHTML = (code: string): LintResult[] => {
   const results: LintResult[] = [];
@@ -17,8 +17,7 @@ export const lintHTML = (code: string): LintResult[] => {
   
   if (!trimmedCode) return results;
 
-  // --- STENHÅRD KONTROLL: Jabbel & Ostrukturerad text ---
-  // Om koden innehåller bokstäver men inga taggar överhuvudtaget, eller bara slumpmässiga tecken
+  // --- DIREKT KONTROLL: Saknad struktur ---
   const hasTags = /<[a-z][\s\S]*>/i.test(trimmedCode);
   const isGibberish = trimmedCode.length > 0 && !hasTags;
 
@@ -27,9 +26,9 @@ export const lintHTML = (code: string): LintResult[] => {
       line: 1,
       category: 'STRUCTURE',
       severity: 'error',
-      message: `Vad är det här för någonting? Jag har kodat sedan 1980-talet och jag har aldrig sett något så oprofessionellt. Att bara skriva slumpmässig text utan struktur är oacceptabelt. Etablera ett fundament direkt: Börja med en <h1> eller en <main>-tagg om du vill bli tagen på allvar.`
+      message: `Du behöver tillföra struktur på din sida. Börja med att lägga till en rubrik (t.ex. <h1>) eller en <main>-tagg.`
     });
-    return results; // Avbryt direkt, veteranen vägrar titta på mer
+    return results;
   }
 
   const lines = code.split('\n');
@@ -65,7 +64,7 @@ export const lintHTML = (code: string): LintResult[] => {
               line: i + 1,
               category: 'STRUCTURE',
               severity: 'warning',
-              message: `Hoppsan, här går det undan! Du hoppar från H${lastHeaderLevel} till ${tagName.toUpperCase()}. En arkitekt bygger en trappa steg för steg. Följ hierarkin: H1 -> H2 -> H3. Gör om för att säkra SEO-strukturen.`
+              message: `Hoppa inte över nivåer i rubrikerna. Använd H${lastHeaderLevel + 1} efter H${lastHeaderLevel} för en korrekt struktur.`
             });
           }
           lastHeaderLevel = level;
@@ -77,7 +76,7 @@ export const lintHTML = (code: string): LintResult[] => {
             line: i + 1,
             category: 'BEST_PRACTICE',
             severity: 'tip',
-            message: `Inline-stilar? Det här är inte 1995. Separera presentation från struktur. Flytta dina stilar till en CSS-fil: .min-klass { färg: röd; }. Det kallas arkitektur, inte dekorering.`
+            message: `Undvik inline-stilar. Lägg dina stilar i en CSS-fil med klasser (class="...") istället.`
           });
         }
 
@@ -87,7 +86,7 @@ export const lintHTML = (code: string): LintResult[] => {
             line: i + 1,
             category: 'A11Y',
             severity: 'error',
-            message: `KRITISKT FEL: En <img> utan 'alt'-text är blind för skärmläsare. I min värld inkluderar vi alla. Lägg till det nu: <img src="..." alt="Beskriv bilden här">.`
+            message: `Lägg till en 'alt'-text på din bild (t.ex. alt="Beskrivning") så att alla kan förstå vad den föreställer.`
           });
         }
 
@@ -96,7 +95,7 @@ export const lintHTML = (code: string): LintResult[] => {
             line: i + 1,
             category: 'A11Y',
             severity: 'warning',
-            message: `En tom knapp? Hur ska användaren veta vad den gör? Lägg till text inuti eller ett 'aria-label="Namn"'. Ge elementet en mening.`
+            message: `En knapp behöver text inuti (t.ex. <button>Klicka här</button>) för att användaren ska förstå vad den gör.`
           });
         }
 
@@ -109,7 +108,7 @@ export const lintHTML = (code: string): LintResult[] => {
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `Hörru, ID-namnet "${id}" används redan. Ett ID är som ett personnummer – helt unikt. Behöver du återanvända stilen? Använd class="..." istället.`
+              message: `ID-namnet "${id}" används redan. Ett ID måste vara helt unikt på sidan.`
             });
           }
           ids.add(id);
@@ -125,7 +124,7 @@ export const lintHTML = (code: string): LintResult[] => {
             line: i + 1,
             category: 'ERROR',
             severity: 'error',
-            message: `Du försöker stänga </${tagName}>, men du har aldrig öppnat den. Var noggrann, slarv leder till buggar.`
+            message: `Du försöker stänga </${tagName}> utan att ha öppnat den. Kontrollera stavningen.`
           });
         } else {
           const last = stack.pop();
@@ -134,7 +133,7 @@ export const lintHTML = (code: string): LintResult[] => {
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `Total förvirring i strukturen. Du stänger </${tagName}> men senaste öppnade var <${last?.tag}> (rad ${last?.line}). Stäng dem i rätt ordning!`
+              message: `Taggen </${tagName}> stängs i fel ordning. Du behöver stänga <${last?.tag}> först.`
             });
           }
         }
@@ -144,13 +143,13 @@ export const lintHTML = (code: string): LintResult[] => {
     }
   }
 
-  // Slutgiltig bedömning
+  // Slutgiltig kontroll
   if (h1Count > 1) {
     results.push({
       line: 1,
       category: 'STRUCTURE',
       severity: 'warning',
-      message: `En sida, en kapten. Du har ${h1Count} stycken H1:or. Bestäm dig för vad som är viktigast och använd bara en huvudrubrik. Det hjälper både Google och dina användare.`
+      message: `Använd bara en H1-rubrik per sida för att göra det tydligt vad som är den viktigaste rubriken.`
     });
   }
 
@@ -159,7 +158,7 @@ export const lintHTML = (code: string): LintResult[] => {
       line: 1,
       category: 'SEMANTIC',
       severity: 'tip',
-      message: `Det börjar dofta 'Div-soppa' här (${divCount} stycken). Varför inte använda <main>, <section> eller <article>? Ge webbläsaren en chans att förstå vad koden faktiskt föreställer.`
+      message: `Försök använda <main>, <section> eller <article> istället för så många <div>-taggar för att ge sidan mer mening.`
     });
   }
 
@@ -169,7 +168,7 @@ export const lintHTML = (code: string): LintResult[] => {
       line: unclosed!.line,
       category: 'ERROR',
       severity: 'error',
-      message: `Du lämnade <${unclosed!.tag}> öppen. Jag tolererar inte oavslutade jobb. Stäng den med </${unclosed!.tag}>.`
+      message: `Taggen <${unclosed!.tag}> är fortfarande öppen. Skriv </${unclosed!.tag}> för att stänga den.`
     });
   }
 

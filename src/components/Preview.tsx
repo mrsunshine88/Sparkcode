@@ -78,9 +78,8 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
         finalHtml = finalHtml.replace('</head>', `${blueprintStyles}</head>`);
       }
 
-      const linkedHtml = blobManager.linkHtml(finalHtml);
-      // Flimmer-skydd: Injicera omedelbar vit bakgrund innan resten av sidan laddas
-      const flickerProtectedHtml = linkedHtml.replace('<head>', '<head><style>body { background-color: white !important; }</style>');
+      // Flimmer-skydd: Injicera omedelbar bakgrund innan resten av sidan laddas
+      const flickerProtectedHtml = linkedHtml.replace('<head>', '<head><style>body { background-color: white; }</style>');
       iframeRef.current.srcdoc = flickerProtectedHtml;
     }
   }, [code, isBlueprintMode]);

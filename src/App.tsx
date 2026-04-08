@@ -633,6 +633,21 @@ function App() {
     }
   };
 
+  const handleRefreshGitHubAccess = async () => {
+    addLog('SYSTEM', 'Initierar förnyelse av GitHub-åtkomst...');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: window.location.origin,
+        scopes: 'repo read:user user:email'
+      }
+    });
+
+    if (error) {
+      addLog('ERROR', `Kunde inte förnya åtkomst: ${error.message}`);
+    }
+  };
+
   const handleSwitchProject = async (project: ProjectMetadata) => {
     try {
       const hasPermission = await projectRegistry.verifyPermission(project.handle);
@@ -761,6 +776,11 @@ function App() {
         setCloudExplorerInitialTab('GITHUB');
         setIsCloudExplorerOpen(true);
       }
+    },
+    {
+      label: 'FÖRNYA GITHUB-ÅTKOMST',
+      icon: <Lock size={14} />,
+      onClick: handleRefreshGitHubAccess
     },
     { 
       label: 'NYTT PROJEKT', 
@@ -1427,15 +1447,9 @@ function App() {
               
               addLog('SUCCESS', `Projektet "${repoName}" är nu klart och sparat på din dator!`);
             } catch (err) {
-              console.error('Kunde inte spara till disk:', err);
-              addLog('ERROR', 'Ett fel uppstod när filer skrevs till disk.');
-            }
-          }
           setSyncStatus('synced');
         }}
       />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {isSettingsOpen && (
