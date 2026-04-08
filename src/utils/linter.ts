@@ -8,19 +8,35 @@ export interface LintResult {
 }
 
 /**
- * Senior Architect HTML Linter
- * Analyserar kod för kvalitet, tillgänglighet och semantik.
+ * Senior Architect HTML Linter (40 Years Experience Edition)
+ * Analyserar kod med extrem noggrannhet och noll tolerans för slarv.
  */
-export const lintHTML = (code: string, availableFunctions: string[] = []): LintResult[] => {
+export const lintHTML = (code: string): LintResult[] => {
   const results: LintResult[] = [];
-  if (!code.trim()) return results;
+  const trimmedCode = code.trim();
+  
+  if (!trimmedCode) return results;
+
+  // --- STENHÅRD KONTROLL: Jabbel & Ostrukturerad text ---
+  // Om koden innehåller bokstäver men inga taggar överhuvudtaget, eller bara slumpmässiga tecken
+  const hasTags = /<[a-z][\s\S]*>/i.test(trimmedCode);
+  const isGibberish = trimmedCode.length > 0 && !hasTags;
+
+  if (isGibberish) {
+    results.push({
+      line: 1,
+      category: 'STRUCTURE',
+      severity: 'error',
+      message: `Vad är det här för någonting? Jag har kodat sedan 1980-talet och jag har aldrig sett något så oprofessionellt. Att bara skriva slumpmässig text utan struktur är oacceptabelt. Etablera ett fundament direkt: Börja med en <h1> eller en <main>-tagg om du vill bli tagen på allvar.`
+    });
+    return results; // Avbryt direkt, veteranen vägrar titta på mer
+  }
 
   const lines = code.split('\n');
   const stack: { tag: string; line: number }[] = [];
   const tagRegex = /<(\/?)([a-z1-6]+)([^>]*)>/gi;
   const ids = new Set<string>();
   
-  // Arkitekt-state
   let h1Count = 0;
   let lastHeaderLevel = 0;
   let divCount = 0;
@@ -36,7 +52,6 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
       const attributes = match[3];
 
       if (!isClosing) {
-        // --- Arkitekt-regler: Struktur & Semantik ---
         if (tagName === 'div') divCount++;
         if (tagName === 'main') hasMain = true;
         
@@ -50,7 +65,7 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
               line: i + 1,
               category: 'STRUCTURE',
               severity: 'warning',
-            message: `Strukturell inkonsekvens: Hierarkiskt hopp från H${lastHeaderLevel} till ${tagName.toUpperCase()} detekterat. En arkitekt följer en strikt logisk ordning för att säkerställa optimal SEO och dokumentstruktur.`
+              message: `Hoppsan, här går det undan! Du hoppar från H${lastHeaderLevel} till ${tagName.toUpperCase()}. En arkitekt bygger en trappa steg för steg. Följ hierarkin: H1 -> H2 -> H3. Gör om för att säkra SEO-strukturen.`
             });
           }
           lastHeaderLevel = level;
@@ -62,17 +77,17 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
             line: i + 1,
             category: 'BEST_PRACTICE',
             severity: 'tip',
-            message: `Inline-stilar detekterade. Enligt professionell standard bör presentation separeras från struktur; flytta dina deklarationer till en dedikerad CSS-fil för att bibehålla en ren arkitektur.`
+            message: `Inline-stilar? Det här är inte 1995. Separera presentation från struktur. Flytta dina stilar till en CSS-fil: .min-klass { färg: röd; }. Det kallas arkitektur, inte dekorering.`
           });
         }
 
-        // --- Arkitekt-regler: Tillgänglighet (A11y) ---
+        // Tillgänglighet (A11y)
         if (tagName === 'img' && !attributes.includes('alt=')) {
           results.push({
             line: i + 1,
             category: 'A11Y',
             severity: 'error',
-            message: `Kritiskt tillgänglighetsfel: <img> saknar 'alt'-attribut. Professionell webb kräver inkludering; beskriv objektets semantiska betydelse för att tillgodose användare med skärmläsare.`
+            message: `KRITISKT FEL: En <img> utan 'alt'-text är blind för skärmläsare. I min värld inkluderar vi alla. Lägg till det nu: <img src="..." alt="Beskriv bilden här">.`
           });
         }
 
@@ -81,25 +96,11 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
             line: i + 1,
             category: 'A11Y',
             severity: 'warning',
-            message: `Semantisk ofullständighet: Tomma knappar är osynliga för assistiv teknik. Om knappen är rent visuell krävs ett 'aria-label' för att förmedla dess funktion.`
+            message: `En tom knapp? Hur ska användaren veta vad den gör? Lägg till text inuti eller ett 'aria-label="Namn"'. Ge elementet en mening.`
           });
         }
 
-        // --- Arkitekt-regler: Logik-validering (Deep-Linting) ---
-        const eventMatch = attributes.match(/on\w+=["'](\w+)\(?.*?["']/i);
-        if (eventMatch && availableFunctions.length > 0) {
-          const funcName = eventMatch[1];
-          if (!availableFunctions.includes(funcName)) {
-            results.push({
-              line: i + 1,
-              category: 'SEMANTIC',
-              severity: 'warning',
-              message: `Logisk diskrepans: Elementet refererar till funktionen '${funcName}', men ingen sådan deklaration hittades i projektets JavaScript-filer. Verifiera din logik.`
-            });
-          }
-        }
-
-        // Duplicerade ID:n (Kritiskt fel)
+        // ID-validering
         const idMatch = attributes.match(/id=["']([^"']+)["']/i);
         if (idMatch) {
           const id = idMatch[1];
@@ -108,14 +109,13 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `ID-namnet "${id}" används redan. Ett ID måste vara helt unikt på sidan. Använd 'class' om du vill stila flera element likadant.`
+              message: `Hörru, ID-namnet "${id}" används redan. Ett ID är som ett personnummer – helt unikt. Behöver du återanvända stilen? Använd class="..." istället.`
             });
           }
           ids.add(id);
         }
       }
 
-      // --- Klassisk tag-matchning logic ---
       const selfClosing = ['img', 'br', 'hr', 'input', 'link', 'meta'].includes(tagName);
       if (selfClosing) continue;
 
@@ -125,7 +125,7 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
             line: i + 1,
             category: 'ERROR',
             severity: 'error',
-            message: `Du försöker stänga </${tagName}>, men det finns ingen matchande öppnings-tagg.`
+            message: `Du försöker stänga </${tagName}>, men du har aldrig öppnat den. Var noggrann, slarv leder till buggar.`
           });
         } else {
           const last = stack.pop();
@@ -134,7 +134,7 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
               line: i + 1,
               category: 'ERROR',
               severity: 'error',
-              message: `Fel ordning! Du försöker stänga </${tagName}>, men den senaste öppnade taggen var <${last?.tag}> (rad ${last?.line}).`
+              message: `Total förvirring i strukturen. Du stänger </${tagName}> men senaste öppnade var <${last?.tag}> (rad ${last?.line}). Stäng dem i rätt ordning!`
             });
           }
         }
@@ -144,43 +144,32 @@ export const lintHTML = (code: string, availableFunctions: string[] = []): LintR
     }
   }
 
-  // --- Slutgiltig Arkitekt-bedömning ---
+  // Slutgiltig bedömning
   if (h1Count > 1) {
     results.push({
       line: 1,
       category: 'STRUCTURE',
       severity: 'warning',
-      message: `Multiple H1-instanser detekterade (${h1Count}). Standardpraxis kräver en unik huvudrubrik per dokument för att understryka sidans primära syfte och optimera indexering.`
+      message: `En sida, en kapten. Du har ${h1Count} stycken H1:or. Bestäm dig för vad som är viktigast och använd bara en huvudrubrik. Det hjälper både Google och dina användare.`
     });
   }
 
-  if (divCount > 10 && !hasMain) {
+  if (divCount > 12 && !hasMain) {
     results.push({
       line: 1,
       category: 'SEMANTIC',
       severity: 'tip',
-      message: `Analys indikerar 'Div-suffocation' (${divCount} stycken). Revidera strukturen och inför semantiska element som <main>, <section> eller <article> för att höja kodens arkitektoniska värde.`
+      message: `Det börjar dofta 'Div-soppa' här (${divCount} stycken). Varför inte använda <main>, <section> eller <article>? Ge webbläsaren en chans att förstå vad koden faktiskt föreställer.`
     });
   }
 
-  // Oavslutade taggar
   while (stack.length > 0) {
     const unclosed = stack.pop();
     results.push({
       line: unclosed!.line,
       category: 'ERROR',
       severity: 'error',
-      message: `Taggen <${unclosed!.tag}> stängdes aldrig. Webbläsaren kommer gissa var den slutar, vilket kan förstöra din layout.`
-    });
-  }
-
-  // Kontrollera om det saknas taggar helt (men finns text)
-  if (results.length === 0 && h1Count === 0 && divCount === 0 && !hasMain && code.trim().length > 0 && !code.includes('<')) {
-    results.push({
-      line: 1,
-      category: 'STRUCTURE',
-      severity: 'error',
-      message: `Analys indikerar avsaknad av arkitektoniskt fundament. Professionell utveckling kräver semantisk struktur; etablera källkodens ramverk med korrekta element såsom <h1>, <p> eller <main>.`
+      message: `Du lämnade <${unclosed!.tag}> öppen. Jag tolererar inte oavslutade jobb. Stäng den med </${unclosed!.tag}>.`
     });
   }
 

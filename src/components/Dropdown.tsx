@@ -42,7 +42,22 @@ const Dropdown: React.FC<DropdownProps> = ({ label, items }) => {
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
+          <>
+            {/* Backdrop som fångar klick överallt (även över iframes) */}
+            <div 
+              className="dropdown-backdrop" 
+              onClick={() => setIsOpen(false)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999, /* Extremt högt för att täcka allt */
+                background: 'transparent'
+              }}
+            />
+            <motion.div 
             initial={{ opacity: 0, y: -10, scaleY: 0 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
             exit={{ opacity: 0, y: -10, scaleY: 0 }}
@@ -103,7 +118,8 @@ const Dropdown: React.FC<DropdownProps> = ({ label, items }) => {
               </div>
             ))}
           </motion.div>
-        )}
+        </>
+      )}
       </AnimatePresence>
     </div>
   );

@@ -79,7 +79,9 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
       }
 
       const linkedHtml = blobManager.linkHtml(finalHtml);
-      iframeRef.current.srcdoc = linkedHtml;
+      // Flimmer-skydd: Injicera omedelbar vit bakgrund innan resten av sidan laddas
+      const flickerProtectedHtml = linkedHtml.replace('<head>', '<head><style>body { background-color: white !important; }</style>');
+      iframeRef.current.srcdoc = flickerProtectedHtml;
     }
   }, [code, isBlueprintMode]);
 
@@ -93,7 +95,7 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
     <div style={{ 
       flex: 1, 
       height: '100%', 
-      background: '#1a1a1a', 
+      background: 'white', 
       display: 'flex', 
       justifyContent: 'center',
       overflow: 'hidden',
@@ -114,6 +116,7 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
             width: '100%',
             height: '100%',
             border: 'none',
+            background: 'white'
           }}
           src={overrideUrl || undefined}
           sandbox="allow-scripts allow-same-origin allow-forms"

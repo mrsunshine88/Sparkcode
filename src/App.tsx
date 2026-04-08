@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, LogOut, 
+  Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, 
   GitBranch, PlusSquare, History as HistoryIcon, X, Info
 } from 'lucide-react';
 import CodeEditor from './components/Editor';
@@ -33,6 +33,7 @@ import * as prettier from 'prettier/standalone';
 import * as prettierHtml from 'prettier/parser-html';
 import * as prettierPostcss from 'prettier/parser-postcss';
 import * as prettierBabel from 'prettier/parser-babel';
+import { cloudSyncService } from './services/cloudSyncService';
 import './App.css';
 
 function App() {
@@ -83,6 +84,8 @@ function App() {
   const [detectedFramework, setDetectedFramework] = useState<string | null>(null);
   const [isServerInputOpen, setIsServerInputOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAiBarVisible, setIsAiBarVisible] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   
   // Hjälpfunktion för att lägga till loggar
   const addLog = (type: 'SYSTEM' | 'ERROR' | 'WARNING', content: string) => {
@@ -98,7 +101,6 @@ function App() {
   // Senior Architect Upgrades state
   const [isBlueprintMode, setIsBlueprintMode] = useState(false);
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
-  const [availableFunctions, setAvailableFunctions] = useState<string[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
 
   // Hantera autentisering
@@ -144,25 +146,32 @@ function App() {
     }
   }, []);
 
-  // Kör lintern när koden ändras
+  // Kör lintern när koden ändras (Ska alltid döma, även utan vald fil)
   useEffect(() => {
     let currentErrors: LintResult[] = [];
+    const fileNameLower = activeFileName?.toLowerCase() || '';
     
-    if (activeFileName) {
-      const fileNameLower = activeFileName.toLowerCase();
-      if (fileNameLower.endsWith('.html') || fileNameLower === 'index' || fileNameLower === 'test') {
-        currentErrors = lintHTML(code, availableFunctions);
-      } else if (fileNameLower.endsWith('.css')) {
-        currentErrors = lintCSS(code);
-      }
+    // Om ingen fil är aktiv, kör vi standard HTML-linter på editorn
+    if (!activeFileName || fileNameLower.endsWith('.html') || fileNameLower === 'index' || fileNameLower === 'test') {
+      currentErrors = lintHTML(code);
+    } else if (fileNameLower.endsWith('.css')) {
+      currentErrors = lintCSS(code);
     }
     
     setErrors(currentErrors);
-    setIsValid(!currentErrors.some(e => e.category === 'ERROR'));
-  }, [code, activeFileName, availableFunctions]);
+    setIsValid(!currentErrors.some(e => e.severity === 'error'));
+  }, [code, activeFileName]);
 
   // Kvalitets-index beräkning för status-raden
-  const qualityScore = Math.max(0, 100 - (errors.length * 10) - (errors.some(e => e.message.includes("struktur")) ? 50 : 0));
+  // Kvalitets-index (Viktat för stenhård bedömning)
+  const calculateQuality = () => {
+    if (errors.length === 0) return 100;
+    const hasGibberish = errors.some(e => e.message.includes("Vad är det här") || e.message.includes("ARKITEKTONISKT FUNDAMENT"));
+    if (hasGibberish) return 0;
+    const penalty = errors.reduce((acc, err) => acc + (err.severity === 'error' ? 35 : err.severity === 'warning' ? 15 : 5), 0);
+    return Math.max(0, 100 - penalty);
+  };
+  const qualityScore = calculateQuality();
   const topError = errors[0];
 
   // Auto-save till lokala filen om vald
@@ -193,6 +202,48 @@ function App() {
     }
   }, [code, activeFileHandle, isValid, fileEntries]);
 
+  // Helautomatisk Cloud Sync (Auto-Push)
+  useEffect(() => {
+    if (session && currentProject && activeFileName && code.trim()) {
+      setSyncStatus('syncing');
+      const syncTimeout = setTimeout(async () => {
+        try {
+          await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
+          setSyncStatus('synced');
+        } catch (err) {
+          console.error('Cloud Sync Error:', err);
+          setSyncStatus('error');
+        }
+      }, 2000); // Tyst auto-push efter 2 sekunder
+      return () => clearTimeout(syncTimeout);
+    }
+  }, [code, activeFileName, currentProject, session]);
+
+  // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
+  useEffect(() => {
+    if (session && currentProject && fileEntries.length > 0) {
+      const performAutoPull = async () => {
+        try {
+          setSyncStatus('syncing');
+          await cloudSyncService.syncCloudToLocal(
+            currentProject.name, 
+            fileEntries,
+            (path, content) => {
+              if (activeFileName === path) setCode(content);
+            }
+          );
+          setSyncStatus('synced');
+          addLog('SYSTEM', 'Sömlös molnsynk slutförd: Lokala filer uppdaterade.');
+        } catch (err) {
+            console.error('Auto-Pull Error:', err);
+            setSyncStatus('error');
+        }
+      };
+      
+      performAutoPull();
+    }
+  }, [session, currentProject?.id]); // Körs när projektet eller sessionen ändras
+
   const updateAvailableFunctions = async () => {
     const functions: string[] = [];
     
@@ -210,9 +261,8 @@ function App() {
         }
       }
     };
-
-    await scanFiles(fileEntries);
-    setAvailableFunctions([...new Set(functions)]);
+    
+    scanFiles(fileEntries);
   };
 
   const handleRollback = (snapshot: CodeSnapshot) => {
@@ -485,66 +535,6 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  const menuItems = [
-    { 
-      label: 'Öppna mapp...', 
-      icon: <FolderOpen size={14} />, 
-      shortcut: 'Ctrl+O',
-      onClick: handleConnectDirectory 
-    },
-    { 
-      label: 'Nytt projekt', 
-      icon: <PlusSquare size={14} />, 
-      onClick: async () => {
-        setDirectoryHandle(null);
-        setFileEntries([]);
-        setCurrentProject(null);
-        handleConnectDirectory();
-      }
-    },
-    {
-      label: 'Senaste projekt',
-      icon: <HistoryIcon size={14} />,
-      children: recentProjects.map(p => ({
-        label: p.name,
-        onClick: () => handleSwitchProject(p)
-      }))
-    },
-    {
-      label: 'Döp om projekt',
-      onClick: handleRenameProject
-    },
-    { 
-      label: 'Spara', 
-      shortcut: 'Ctrl+S', 
-      onClick: () => {
-        setPushStatus('SYSTEM_SAVE_SUCCESS');
-        setTimeout(() => setPushStatus(''), 2000);
-      } 
-    },
-    {
-      label: 'Format Kod (Prettier)',
-      icon: <Info size={14} />,
-      onClick: handlePrettify
-    },
-    {
-      label: `Vim-läge: ${isVimMode ? 'PÅ' : 'AV'}`,
-      icon: <Terminal size={14} />,
-      onClick: () => setIsVimMode(!isVimMode)
-    },
-    { 
-      label: 'EXPORTERA PROJEKT (ZIP)', 
-      onClick: () => {
-        if (currentProject) {
-          exportProjectToZip(fileEntries, currentProject.name);
-          addLog('SYSTEM', `Exporterar projekt: ${currentProject.name}.zip`);
-        } else {
-          addLog('ERROR', 'Inget aktivt projekt hittades för export.');
-        }
-      } 
-    },
-    { label: 'LOGGA UT', onClick: handleLogout }
-  ];
 
   if (!session) {
     return (
@@ -581,17 +571,79 @@ function App() {
     }
   };
 
+  const menuItems = [
+    { 
+      label: 'Öppna mapp...', 
+      icon: <FolderOpen size={14} />, 
+      shortcut: 'Ctrl+O',
+      onClick: handleConnectDirectory 
+    },
+    { 
+      label: 'Nytt projekt', 
+      icon: <PlusSquare size={14} />, 
+      onClick: async () => {
+        setDirectoryHandle(null);
+        setFileEntries([]);
+        setCurrentProject(null);
+        handleConnectDirectory();
+      }
+    },
+    {
+      label: 'Senaste projekt',
+      icon: <HistoryIcon size={14} />,
+      children: recentProjects.length > 0 
+        ? recentProjects.map(p => ({
+            label: p.name,
+            onClick: () => handleSwitchProject(p)
+          }))
+        : [{ label: 'Inga sparade projekt', onClick: () => {} }]
+    },
+    {
+      label: 'Döp om projekt',
+      onClick: handleRenameProject
+    },
+    { 
+      label: 'Spara', 
+      shortcut: 'Ctrl+S', 
+      onClick: () => {
+        setPushStatus('SYSTEM_SAVE_SUCCESS');
+        setTimeout(() => setPushStatus(''), 2000);
+      } 
+    },
+    {
+      label: 'Format Kod (Prettier)',
+      icon: <Info size={14} />,
+      onClick: handlePrettify
+    },
+    {
+      label: `Vim-läge: ${isVimMode ? 'PÅ' : 'AV'}`,
+      icon: <Terminal size={14} />,
+      onClick: () => setIsVimMode(!isVimMode)
+    },
+    { 
+      label: 'RUN AUDIT (DJUPANALYS)', 
+      icon: <Zap size={14} />,
+      onClick: handleRunAudit 
+    },
+    { 
+      label: 'EXPORTERA PROJEKT (ZIP)', 
+      onClick: () => {
+        if (currentProject) {
+          exportProjectToZip(fileEntries, currentProject.name);
+          addLog('SYSTEM', `Exporterar projekt: ${currentProject.name}.zip`);
+        } else {
+          addLog('ERROR', 'Inget aktivt projekt hittades för export.');
+        }
+      } 
+    },
+    { label: 'LOGGA UT', onClick: handleLogout }
+  ];
+
   return (
     <div className={`app-container ${qualityScore === 100 ? 'achievement-unlocked' : ''}`}>
       <div className="crt-overlay"></div>
       
       <header className="header">
-        <div className="logo">
-          <Zap className="glow-text" size={24} />
-          <span className="glow-text desktop-only">SPARKCODE {currentProject ? `| ${currentProject.name}` : ''}</span>
-          <span className="glow-text mobile-only">SC</span>
-        </div>
-        
         <div className="header-nav">
           <Dropdown label="ARKIV" items={menuItems} />
           {fileEntries.length > 0 && (
@@ -606,7 +658,22 @@ function App() {
               } 
             />
           )}
-          <div className="divider desktop-only"></div>
+
+          {/* Mobile Menu Toggle - Bredvid ARKIV på mobilen */}
+          <button 
+            className="hacker-button mobile-only menu-toggle" 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            style={{ marginLeft: '5px' }}
+          >
+            {isMobileMenuOpen ? <X size={18} /> : <Terminal size={18} />}
+            <span>MENY</span>
+          </button>
+        </div>
+
+        <div className="logo">
+          <Zap className="glow-text" size={24} />
+          <span className="glow-text desktop-only">SPARKCODE {currentProject ? `| ${currentProject.name}` : ''}</span>
+          <span className="glow-text mobile-only">SC</span>
         </div>
         
         {/* Desktop Header Info */}
@@ -621,6 +688,20 @@ function App() {
           {pushStatus && (
             <div className="push-notification glow-text">
                {pushStatus}
+            </div>
+          )}
+          
+          {/* Cloud Sync Status Indicator */}
+          {session && (
+            <div className={`sync-indicator ${syncStatus}`} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontSize: '0.7rem',
+              color: syncStatus === 'synced' ? 'var(--accent-primary)' : syncStatus === 'syncing' ? 'var(--accent-secondary)' : syncStatus === 'error' ? 'var(--error-color)' : 'var(--text-muted)'
+            }}>
+              <Zap size={10} className={syncStatus === 'syncing' ? 'spinner' : ''} />
+              <span style={{ fontWeight: 800 }}>CLOUD_{syncStatus.toUpperCase()}</span>
             </div>
           )}
         </div>
@@ -647,42 +728,38 @@ function App() {
                LEXIKON
              </button>
            </div>
-
-           {/* Mobile Menu Toggle */}
-           <button 
-             className="hacker-button mobile-only menu-toggle" 
-             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-           >
-             {isMobileMenuOpen ? <X size={18} /> : <Terminal size={18} />}
-             <span>MENY</span>
-           </button>
-
-           <button onClick={handleLogout} className="logout-button">
-             <LogOut size={16} />
-           </button>
         </div>
       </header>
 
-      {/* Architect Status Bar - Konstant AI-insyn */}
-      <div className="architect-status-bar">
-        <div className={`status-badge ${isValid ? 'status-valid' : 'status-invalid'}`}>
-          {qualityScore}% QUALITY
+      {/* Architect Status Bar - Konstant AI-insyn (Döljbar på mobil för Zen-mode) */}
+      {isAiBarVisible && (
+        <div className="architect-status-bar">
+          <div className={`status-badge ${isValid ? 'status-valid' : 'status-invalid'}`}>
+            {qualityScore}% QUALITY
+          </div>
+          <button className="hacker-button audit-button" onClick={handleRunAudit}>
+            RUN
+          </button>
+          <div className="status-divider"></div>
+          <div className={`status-advice ${topError ? 'has-error' : ''}`}>
+            {topError ? (
+              <><strong>ADVICE:</strong> {topError.message}</>
+            ) : (
+              <><strong>STATUS:</strong> ARCHITECTURE STABLE. PROCEED.</>
+            )}
+          </div>
+          <button 
+            className="close-ai-button mobile-only" 
+            onClick={() => setIsAiBarVisible(false)}
+            title="Dölj AI (Zen-mode)"
+          >
+            <X size={14} />
+          </button>
+          <div className="desktop-only" style={{ marginLeft: 'auto', opacity: 0.5 }}>
+            FILE: {activeFileName || 'STANDBY'}
+          </div>
         </div>
-        <button className="hacker-button audit-button" onClick={handleRunAudit}>
-          RUN AUDIT
-        </button>
-        <div className="status-divider"></div>
-        <div className="status-advice">
-          {topError ? (
-            <><strong>ADVICE:</strong> {topError.message}</>
-          ) : (
-            <><strong>STATUS:</strong> ARCHITECTURE STABLE. PROCEED.</>
-          )}
-        </div>
-        <div className="desktop-only" style={{ marginLeft: 'auto', opacity: 0.5 }}>
-          FILE: {activeFileName || 'STANDBY'}
-        </div>
-      </div>
+      )}
 
       {/* Mobile Overflow Menu */}
       {isMobileMenuOpen && (
@@ -707,9 +784,20 @@ function App() {
             </div>
 
             <div className="menu-section architect-status">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Zap size={16} className="glow-text" />
-                <h4 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent-primary)' }}>SENIOR ARCHITECT</h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Zap size={16} className="glow-text" />
+                  <h4 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent-primary)' }}>SENIOR ARCHITECT</h4>
+                </div>
+                {!isAiBarVisible && (
+                  <button 
+                    className="hacker-button mini" 
+                    onClick={() => setIsAiBarVisible(true)}
+                    style={{ fontSize: '0.6rem', padding: '2px 6px' }}
+                  >
+                    VISA I HEADER
+                  </button>
+                )}
               </div>
               <AIErrorPanel errors={errors} isValid={isValid} code={code} />
             </div>
