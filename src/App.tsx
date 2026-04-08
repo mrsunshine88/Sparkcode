@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, 
   GitBranch, PlusSquare, History as HistoryIcon, X, Info, Globe, Settings, Lock, Download
@@ -76,6 +76,7 @@ function App() {
   const [isDiffMode, setIsDiffMode] = useState(false);
   const [isVimMode, setIsVimMode] = useState(false);
   const [savedCode, setSavedCode] = useState<string>('');
+  const [cloudSyncedCode, setCloudSyncedCode] = useState<string>('');
   const [projectToRestore, setProjectToRestore] = useState<ProjectMetadata | null>(null);
 
   // Learn from Scratch state
@@ -113,7 +114,6 @@ function App() {
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
   const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
-  const isRemoteSyncingRef = useRef<boolean>(false);
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -270,17 +270,16 @@ function App() {
     }
   }, [session]);
 
+  // Moln-synk: Skicka ändringar till molnet (Dual-Shield: Moln-skölden)
   useEffect(() => {
-    // Endast pusha om ändringen är lokal (Anti-Eko skydd 3.0)
-    // Vi kollar både källan OCH om koden faktiskt skiljer sig från det vi vet finns i molnet
     if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
+      // Om koden redan matchar molnet, skicka inget (Stoppar Eko)
+      if (code === cloudSyncedCode) return;
       
-      if (code === savedCode) return;
-
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
-          // Spara i molnet (Anti-Eko Skydd: Vi skickar bara om vi inte nyss tog emot)
+          // Spara i molnet
           await cloudSyncService.sendBroadcast(currentProject.name, {
             project_name: currentProject.name,
             file_path: activeFileName,
@@ -289,18 +288,19 @@ function App() {
           });
 
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
-          setSavedCode(code); // Markera att detta innehåll nu är i synk med molnet
+          setCloudSyncedCode(code); // Uppdatera moln-spärren efter lyckad push
           setSyncStatus('synced');
+          setTimeout(() => setSyncStatus('idle'), 2000);
         } catch (err) {
-          console.error('Cloud Sync Error:', err);
+          console.error('Molnsynk misslyckades:', err);
           setSyncStatus('error');
+          setTimeout(() => setSyncStatus('idle'), 4000);
         }
-      }, 400); 
+      }, 500);
+
       return () => clearTimeout(syncTimeout);
-    } else if (!isCloudSyncEnabled) {
-      setSyncStatus('idle');
     }
-  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource]);
+  }, [code, activeFileName, currentProject, session, isCloudSyncEnabled, lastChangeSource, cloudSyncedCode]);
 
   // Helautomatisk Cloud Sync (Auto-Pull vid start/session-ändring)
   useEffect(() => {
@@ -312,7 +312,10 @@ function App() {
             currentProject.name, 
             fileEntries,
             (path, content) => {
-              if (activeFileName === path && code !== content) setCode(content);
+              if (activeFileName === path && code !== content) {
+                setCode(content);
+                setCloudSyncedCode(content); // Moln-sköld: Vi är i synk nu
+              }
             }
           );
           setSyncStatus('synced');
@@ -331,15 +334,15 @@ function App() {
                 currentProject.name,
                 session.user.id,
                 async (cloudFile) => {
-                  // BLIXTSNABB SYNK: För aktiv fil uppdaterar vi bara state ögonblickligen.
+                  // BLIXTSNABB SYNK (DUAL-SHIELD): För aktiv fil uppdaterar vi bara state ögonblickligen.
                   if (activeFileName === cloudFile.file_path) {
-                    isRemoteSyncingRef.current = true;
                     setLastChangeSource('remote');
-                    setCode(cloudFile.content);
+                    setCloudSyncedCode(cloudFile.content); // Moln-skölden stoppar ekot här
+                    setCode(cloudFile.content); // Skärmen uppdateras direkt
+                    
                     // OBS: Vi uppdaterar INTE savedCode här. 
                     // Detta gör att Auto-Save timern upptäcker att filen behöver sparas till disk 
-                    // 1 sekund senare, men lastChangeSource stoppar loopen till molnet.
-                    setTimeout(() => isRemoteSyncingRef.current = false, 100);
+                    // i bakgrunden utan att störa den blixtsnabba moln-synken.
                   }
                   
                   // Uppdatera virtuella fileEntries i bakgrunden
