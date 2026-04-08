@@ -375,6 +375,34 @@ function App() {
     }
   }, [session, currentProject?.id, isCloudSyncEnabled]); // Körs när projektet, sessionen eller synk-inställningen ändras
 
+  // MOBIL TURBO-SYNK: Hjärtslag för att hålla anslutningen vaken (varje sekund)
+  useEffect(() => {
+    if (session && currentProject && isCloudSyncEnabled) {
+      // Skapa en dedikerad "Keep-Alive" kanal
+      const heartbeatChannel = supabase.channel(`heartbeat-${session.user.id}`);
+      
+      heartbeatChannel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Turbo-Synk Heartbeat: Aktiv');
+        }
+      });
+
+      const interval = setInterval(() => {
+        // Skicka ett minimalt broadcast-meddelande för att hålla pipsen varm
+        heartbeatChannel.send({
+          type: 'broadcast',
+          event: 'heartbeat',
+          payload: { ts: Date.now() }
+        });
+      }, 1000); // VARJE SEKUND ;)
+
+      return () => {
+        clearInterval(interval);
+        heartbeatChannel.unsubscribe();
+      };
+    }
+  }, [session, currentProject, isCloudSyncEnabled]);
+
   const updateAvailableFunctions = async () => {
     const functions: string[] = [];
     
