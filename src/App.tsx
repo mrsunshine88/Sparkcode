@@ -98,7 +98,7 @@ function App() {
   });
   
   // Hjälpfunktion för att lägga till loggar
-  const addLog = (type: 'SYSTEM' | 'ERROR' | 'WARNING', content: string) => {
+  const addLog = (type: 'SYSTEM' | 'ERROR' | 'WARNING' | 'SUCCESS', content: string) => {
     const newLog: LogEntry = {
       id: Math.random().toString(36).substr(2, 9),
       type: type === 'SYSTEM' ? 'info' : type.toLowerCase() as any,
@@ -560,6 +560,11 @@ function App() {
       if (!targetRepo) {
         setPushStatus(`Creating new repository: ${repoName}...`);
         targetRepo = await githubService.createRepo(repoName);
+      }
+
+      if (!targetRepo) {
+        setPushStatus('PUSH_FAIL: Kunde inte skapa eller hitta repo.');
+        return;
       }
 
       const [owner, repo] = targetRepo.full_name.split('/');

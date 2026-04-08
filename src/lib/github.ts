@@ -161,6 +161,26 @@ export class GitHubService {
       sha,
     });
   }
+
+  /**
+   * Skapar ett nytt repo.
+   */
+  async createRepo(name: string): Promise<GitHubRepo> {
+    if (!this.octokit) await this.init();
+    if (!this.octokit) throw new Error('GitHub not initialized');
+
+    const { data } = await this.octokit.rest.repos.createForAuthenticatedUser({
+      name,
+      auto_init: true,
+      private: false,
+    });
+
+    return {
+      name: data.name,
+      full_name: data.full_name,
+      html_url: data.html_url,
+    };
+  }
 }
 
 export const githubService = new GitHubService();

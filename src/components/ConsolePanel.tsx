@@ -1,9 +1,9 @@
 import React from 'react';
-import { Terminal as TerminalIcon, XCircle, AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { Terminal as TerminalIcon, XCircle, AlertTriangle, Info, Trash2, CheckCircle } from 'lucide-react';
 
 export interface LogEntry {
   id: string;
-  type: 'log' | 'error' | 'warn' | 'info';
+  type: 'log' | 'error' | 'warn' | 'info' | 'success';
   content: string;
   timestamp: number;
 }
@@ -45,6 +45,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({ logs, onClear, onClose }) =
                 {log.type === 'error' && <XCircle size={12} />}
                 {log.type === 'warn' && <AlertTriangle size={12} />}
                 {log.type === 'info' && <Info size={12} />}
+                {log.type === 'success' && <CheckCircle size={12} />}
               </span>
               <span className="log-message">{log.content}</span>
             </div>
@@ -127,6 +128,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({ logs, onClear, onClose }) =
         .console-entry.error .log-message, .console-entry.error .log-icon { color: var(--error-color); }
         .console-entry.warn .log-message, .console-entry.warn .log-icon { color: var(--accent-secondary); }
         .console-entry.info .log-message, .console-entry.info .log-icon { color: #0088ff; }
+        .console-entry.success .log-message, .console-entry.success .log-icon { color: var(--accent-primary); }
 
         .log-message {
           word-break: break-all;
