@@ -11,12 +11,29 @@ export interface CloudFile {
 }
 
 export const cloudSyncService = {
+  cachedSession: null as any,
+
+  /**
+   * Uppdaterar den interna sessions-cachen.
+   */
+  setSession(session: any) {
+    this.cachedSession = session;
+  },
+
   /**
    * Pushar en fil till molnet (Supabase).
    * Använder upsert för att skriva över existerande rader för samma fil.
    */
   async pushFile(projectName: string, filePath: string, content: string) {
-    const { data: { session } } = await supabase.auth.getSession();
+    // Försök använda cachad session först för max hastighet
+    let session = this.cachedSession;
+    
+    if (!session) {
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      session = newSession;
+      this.cachedSession = newSession;
+    }
+
     if (!session) return null;
 
     const { data, error } = await supabase

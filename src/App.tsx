@@ -246,12 +246,24 @@ function App() {
   }, [code, activeFileHandle, fileEntries]);
 
   useEffect(() => {
+    // Uppdatera sessions-cachen i synktjänsten för snabbare anrop
+    if (session) {
+      cloudSyncService.setSession(session);
+    }
+  }, [session]);
+
+  useEffect(() => {
     // Endast pusha om ändringen är lokal (Anti-Eko skydd)
     if (session && currentProject && activeFileName && isCloudSyncEnabled && lastChangeSource === 'local') {
+      
+      // OPTIMERING: Om koden i editorn redan matchar det vi senast fick från molnet, skicka inte
+      if (code === savedCode) return;
+
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(async () => {
         try {
           await cloudSyncService.pushFile(currentProject.name, activeFileName, code);
+          setSavedCode(code); // Markera att detta innehåll nu är i synk med molnet
           setSyncStatus('synced');
         } catch (err) {
           console.error('Cloud Sync Error:', err);
