@@ -93,7 +93,7 @@ function App() {
   const [isCloudExplorerOpen, setIsCloudExplorerOpen] = useState(false);
   const [cloudExplorerInitialTab, setCloudExplorerInitialTab] = useState<'MOLN' | 'GITHUB'>('MOLN');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isVirtualMode, setIsVirtualMode] = useState(false);
+  const [isVirtualMode] = useState(false);
   const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(() => {
     return localStorage.getItem('sparkcode_cloud_sync_enabled') !== 'false';
   });
@@ -370,7 +370,7 @@ function App() {
     const handle = forceHandle || directoryHandle;
     if (!handle) return;
     try {
-      const entries = await readDirectory(directoryHandle);
+      const entries = await readDirectory(handle as FileSystemDirectoryHandle);
       setFileEntries(entries);
       
       // Kolla om den aktiva filen har ändrats på disken (extern edit)
