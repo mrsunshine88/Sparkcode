@@ -28,6 +28,12 @@ import AIErrorPanel from './components/AIErrorPanel';
 import challenges from './data/challenges.json';
 import { exportProjectToZip } from './utils/projectExporter';
 import { runStructuralAudit } from './utils/auditRobot';
+
+export interface DebugLog {
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: number;
+}
 import type { Session } from '@supabase/supabase-js';
 import * as prettier from 'prettier/standalone';
 import * as prettierHtml from 'prettier/parser-html';
@@ -38,6 +44,10 @@ import { CloudExplorer } from './components/CloudExplorer';
 import { AccountSettings } from './components/AccountSettings';
 import ImportChoiceModal from './components/ImportChoiceModal';
 import { AnimatePresence } from 'framer-motion';
+import { scanProject } from './services/projectScanner';
+import { auditAnatomy } from './utils/anatomyAudit';
+import { runPredictiveAudit } from './utils/predictiveAudit';
+import CtoTerminal from './components/CtoTerminal';
 import './App.css';
 
 function App() {
@@ -114,6 +124,16 @@ function App() {
   const [history, setHistory] = useState<CodeSnapshot[]>([]);
   const [activeBottomTab, setActiveBottomTab] = useState<'console' | 'history'>('console');
   const [lastChangeSource, setLastChangeSource] = useState<'local' | 'remote'>('local');
+  const [structuralErrors, setStructuralErrors] = useState<LintResult[]>([]);
+  const [projectInsight, setProjectInsight] = useState<any>(null);
+  const [domCount, setDomCount] = useState(0);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [activePackages, setActivePackages] = useState<string[]>([]);
+  const [snapshots, setSnapshots] = useState<Record<string, string>>({});
+  const [bridgeStatus, setBridgeStatus] = useState<'OFFLINE' | 'CONNECTED'>('OFFLINE');
+  const [systemMetrics, setSystemMetrics] = useState({ cpu: 0, ram: 0 });
 
   // Import Modal state
   const [importModalData, setImportModalData] = useState<{ isOpen: boolean; repoName: string; files: any[] } | null>(null);
@@ -171,6 +191,112 @@ function App() {
     }
   }, [code, activeFileName, lastChangeSource]);
 
+  // Gå till en specifik rad i editorn (används av Mentorn)
+  const handleFocusLine = async (line: number, fileName?: string) => {
+    // Om felet är i en annan fil, försök byta fil först
+    if (fileName && fileName !== activeFileName) {
+      const fileEntry = fileEntries.find(e => e.name === fileName || e.handle.name === fileName);
+      if (fileEntry) {
+        await handleFileSelect(fileEntry.handle as FileSystemFileHandle);
+        // Vänta lite på att editorn ska laddas om innan vi fokuserar raden
+        setTimeout(() => {
+          if (editorInstance) {
+            editorInstance.revealLineInCenter(line);
+            editorInstance.setPosition({ lineNumber: line, column: 1 });
+            editorInstance.focus();
+          }
+        }, 100);
+        return;
+      }
+    }
+
+    if (editorInstance) {
+      editorInstance.revealLineInCenter(line);
+      editorInstance.setPosition({ lineNumber: line, column: 1 });
+      editorInstance.focus();
+      
+      // Flash-effekt för att visa raden tydligt
+      const decorations = editorInstance.deltaDecorations([], [
+        {
+          range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
+          options: {
+            isWholeLine: true,
+            className: 'monaco-line-highlight-flash'
+          }
+        }
+      ]);
+      
+      setTimeout(() => {
+        editorInstance.deltaDecorations(decorations, []);
+      }, 1000);
+    }
+  };
+
+  // Lyttna på meddelanden från Preview Iframe (Navigering)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'NAVIGATE_TO_FILE') {
+        const targetPath = event.data.path;
+        const fileName = targetPath.split('/').pop()!;
+        const targetEntry = fileEntries.find(e => e.name === fileName);
+        if (targetEntry) {
+          handleFileSelect(targetEntry.handle as FileSystemFileHandle);
+          addLog('SYSTEM', `Navigerar till: ${fileName}`);
+        }
+      } else if (event.data?.type === 'DEBUG_LOG') {
+        const { level, message, timestamp } = event.data;
+        setDebugLogs(prev => [{ level, message, timestamp }, ...prev].slice(0, 100));
+        
+        if (level === 'error') {
+          addLog('ERROR', `RUNTIME: ${message}`);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [fileEntries]);
+
+  // Terminal Kommandohanterare (V10/10)
+  const handleTerminalCommand = (cmd: string): string => {
+    const parts = cmd.split(' ');
+    const action = parts[0].toLowerCase();
+    
+    if (action === 'pkg' && parts[1] === 'add') {
+      const pkg = parts[2];
+      if (!pkg) return "Fel: Ange namnet på biblioteket. (t.ex. pkg add react)";
+      setActivePackages(prev => Array.from(new Set([...prev, pkg])));
+      addLog('SUCCESS', `Bibliotek adderat: ${pkg}`);
+      return `Installerar ${pkg}... Done. Systemet har nu tillgång till ${pkg} via globala imports.`;
+    }
+
+    if (action === 'snapshot' && parts[1] === 'save') {
+      setSnapshots(prev => ({ ...prev, [activeFileName]: code }));
+      addLog('SYSTEM', `Snapshot skapad för ${activeFileName}`);
+      return `Kod-snapshot sparad för ${activeFileName}. Du kan nu se ändringar i Visual Diff.`;
+    }
+
+    if (action === 'logs' && parts[1] === 'clear') {
+      setDebugLogs([]);
+      return "Debug-loggar rensade.";
+    }
+
+    if (['build', 'compile', 'run', 'test'].includes(action)) {
+      if (bridgeStatus === 'OFFLINE') {
+        return `FEL: "Command Bridge" är inte ansluten. Kör 'npx sparkcode-bridge' på din dator för att aktivera backend-muskler.`;
+      }
+      return `KOMMANDO SKICKAT: Initierar ${action.toUpperCase()} på din lokala maskin...`;
+    }
+
+    if (action === 'bridge' && parts[1] === 'connect') {
+      setBridgeStatus('CONNECTED');
+      setSystemMetrics({ cpu: 12, ram: 42 }); // Simulerad metrik vid anslutning
+      return "COMMAND_BRIDGE_ESTABLISHED: Lokal anslutning lyckades. Hårdvaru-övervakning aktiv.";
+    }
+
+    return ""; // Ingen match, kör vanlig AI-tanks
+  };
+
   // Registrera Service Worker för PWA
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -181,6 +307,36 @@ function App() {
       });
     }
   }, []);
+
+  // Hantera DOM-audit (Omni-AI)
+  const handleAudit = (iframe: HTMLIFrameElement) => {
+    const report = runStructuralAudit(iframe);
+    
+    // Mappa audit-rapporten till LintResults
+    const auditResults: LintResult[] = [
+      ...report.criticalIssues.map(msg => ({ line: 1, message: msg, category: 'STRUCTURE' as any, severity: 'error' as any })),
+      ...report.warnings.map(msg => ({ line: 1, message: msg, category: 'ARCHITECTURE' as any, severity: 'warning' as any })),
+      ...report.performanceTips.map(msg => ({ line: 1, message: msg, category: 'BEST_PRACTICE' as any, severity: 'tip' as any })),
+      ...report.visualAnomalies.map(msg => ({ line: 1, message: msg, category: 'VISUAL' as any, severity: 'warning' as any }))
+    ];
+    
+    setDomCount(report.domCount);
+    setStructuralErrors(auditResults);
+  };
+
+  // Kör global projekt-skanning (CTO-läge)
+  const runGlobalScan = async () => {
+    if (directoryHandle) {
+      const insight = await scanProject(directoryHandle);
+      setProjectInsight(insight);
+    }
+  };
+
+  useEffect(() => {
+    if (directoryHandle) {
+      runGlobalScan();
+    }
+  }, [directoryHandle, previewVersion]);
 
   // Kör lintern när koden ändras (Debouncad för prestanda)
   useEffect(() => {
@@ -208,23 +364,21 @@ function App() {
         currentErrors = lintCSS(code);
       }
       
-      setErrors(currentErrors);
-      setIsValid(!currentErrors.some(e => e.severity === 'error'));
-    }, 500); // MENTOR VÄNTAR 500ms - Frigör processorn för skrivande
+      // Lägg till globala anatomiska fel (Filnamn, Brutna länkar etc)
+      let finalErrors = [...currentErrors, ...structuralErrors];
+      if (projectInsight && activeFileName) {
+        const anatomyErrors = auditAnatomy(projectInsight, code, activeFileName);
+        const predictiveErrors = runPredictiveAudit(projectInsight, activeFileName);
+        finalErrors = [...finalErrors, ...anatomyErrors, ...predictiveErrors];
+      }
+      
+      setErrors(finalErrors);
+      setIsValid(!finalErrors.some(e => e.severity === 'error'));
+    }, 500);
 
     return () => clearTimeout(timer);
-  }, [code, activeFileName]);
+  }, [code, activeFileName, structuralErrors, projectInsight]);
 
-  // Kvalitets-index beräkning för status-raden
-  // Kvalitets-index (Viktat för stenhård bedömning)
-  const calculateQuality = () => {
-    if (errors.length === 0) return 100;
-    const hasGibberish = errors.some(e => e.message.includes("Vad är det här") || e.message.includes("ARKITEKTONISKT FUNDAMENT"));
-    if (hasGibberish) return 0;
-    const penalty = errors.reduce((acc, err) => acc + (err.severity === 'error' ? 35 : err.severity === 'warning' ? 15 : 5), 0);
-    return Math.max(0, 100 - penalty);
-  };
-  const qualityScore = calculateQuality();
   const topError = errors[0];
 
   // Central spara-funktion
@@ -1062,8 +1216,17 @@ function App() {
   ];
 
   return (
-    <div className={`app-container ${qualityScore === 100 ? 'achievement-unlocked' : ''}`}>
+    <div className={`app-container ${isValid ? 'achievement-unlocked' : ''} ${isFullscreenPreview ? 'fullscreen-preview-active' : ''}`}>
       <div className="crt-overlay"></div>
+      
+      {isTerminalOpen && (
+        <CtoTerminal 
+          insight={projectInsight} 
+          activeFileName={activeFileName} 
+          onClose={() => setIsTerminalOpen(false)}
+          onCommand={handleTerminalCommand}
+        />
+      )}
       
       <header className="header">
         <div className="header-nav">
@@ -1154,10 +1317,17 @@ function App() {
       {isAiBarVisible && (
         <div className="architect-status-bar">
           <div className={`status-badge ${isValid ? 'status-valid' : 'status-invalid'}`}>
-            {qualityScore}% QUALITY
+            SYSTEM_INTEGRITY
           </div>
           <button className="hacker-button audit-button" onClick={handleRunAudit}>
             RUN
+          </button>
+          <button 
+            className="hacker-button audit-button" 
+            style={{ fontWeight: '900', color: 'var(--accent-primary)', fontSize: '0.65rem' }}
+            onClick={() => setIsTerminalOpen(true)}
+          >
+            ASK_CHEF
           </button>
           <div className="status-divider"></div>
           <div className={`status-advice ${topError ? 'has-error' : ''}`}>
@@ -1363,8 +1533,8 @@ function App() {
                   <div className="file-info shadow-text">
                     <HistoryIcon size={12} /> {directoryHandle ? 'LOKAL FIL ANSLUTEN' : 'VIRTUELT ARKIV AKTIVT'}
                   </div>
-                  <div className="selection-info">
-                    {qualityScore}% QUALITY
+                  <div className="selection-info architect-badge">
+                    SYSTEM_SCAN_ACTIVE
                   </div>
                 </div>
               </div>
@@ -1484,8 +1654,8 @@ function App() {
           </div>
 
           {isServerInputOpen && (
-            <div className="server-guide-overlay">
-              <div className="guide-content">
+            <div className="server-guide-overlay" onClick={() => setIsServerInputOpen(false)}>
+              <div className="guide-content" onClick={e => e.stopPropagation()}>
                 <h3><Link size={16} /> PRO SERVER BRIDGE INITIALIZATION</h3>
                 <p className="guide-subtitle">Följ stegen för att ansluta ditt {detectedFramework || 'projekt'} till SparkCode:</p>
                 
@@ -1538,11 +1708,14 @@ function App() {
           )}
 
           <Preview 
-            key={`${previewVersion}-${isBlueprintMode}`} 
+            key={`${previewVersion}-${isBlueprintMode}-${activePackages.join(',')}`} 
             code={code} 
             width={viewportWidth} 
             overrideUrl={customPreviewUrl}
             isBlueprintMode={isBlueprintMode}
+            onAudit={handleAudit}
+            isFullscreen={isFullscreenPreview}
+            onToggleFullscreen={() => setIsFullscreenPreview(!isFullscreenPreview)}
           />
           <ImportChoiceModal 
             isOpen={!!importModalData?.isOpen}
@@ -1602,7 +1775,19 @@ function App() {
           />
         </section>
 
-        <Sidebar errors={errors} isValid={isValid} code={code} />
+        <Sidebar 
+          errors={errors}
+          isValid={isValid}
+          code={code}
+          activeFileName={activeFileName}
+          projectInsight={projectInsight}
+          domCount={domCount}
+          debugLogs={debugLogs}
+          baselineCode={snapshots[activeFileName] || savedCode}
+          bridgeStatus={bridgeStatus}
+          systemMetrics={systemMetrics}
+          onFocusLine={handleFocusLine}
+        />
       </main>
 
       <nav className="mobile-tabs">

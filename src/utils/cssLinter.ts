@@ -72,6 +72,44 @@ const VALID_CSS_PROPERTIES = new Set([
   'will-change', 'word-break', 'word-spacing', 'word-wrap', 'writing-mode', 'z-index'
 ]);
 
+/**
+ * Beräknar Levenshtein-avståndet mellan två strängar.
+ * (Hur många ändringar som krävs för att göra ord A till ord B).
+ */
+const getLevenshteinDistance = (a: string, b: string): number => {
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // Deletion
+        matrix[i][j - 1] + 1,      // Insertion
+        matrix[i - 1][j - 1] + cost // Substitution
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
+/**
+ * Hittar den mest liknande CSS-egenskapen i ordlistan.
+ */
+const findBestMatch = (input: string): string | null => {
+  let bestMatch = null;
+  let minDistance = 3; // Max 2 ändringar tillåtna för att det ska räknas som ett vettigt förslag
+
+  for (const property of VALID_CSS_PROPERTIES) {
+    const distance = getLevenshteinDistance(input, property);
+    if (distance < minDistance) {
+      minDistance = distance;
+      bestMatch = property;
+    }
+  }
+  return bestMatch;
+};
+
 export const lintCSS = (code: string): LintResult[] => {
   const results: LintResult[] = [];
   if (!code.trim()) return results;
@@ -123,9 +161,13 @@ export const lintCSS = (code: string): LintResult[] => {
       if (lineContent.trim().startsWith(':') || property.startsWith('-')) {
         // Ignorera
       } else if (!VALID_CSS_PROPERTIES.has(property)) {
-        // Försök hitta en nära matchning (pedagogiskt)
+        // Intelligent fuzzy-matching för bättre pedagogik
+        const bestMatch = findBestMatch(property);
         let suggestion = "";
-        if (property === 'backgroun' || property === 'backgroun-color') suggestion = "Menade du 'background-color'?";
+        
+        if (bestMatch) {
+          suggestion = `Menade du '${bestMatch}'?`;
+        }
         
         results.push({
           line: i + 1,
@@ -136,17 +178,55 @@ export const lintCSS = (code: string): LintResult[] => {
       }
     }
 
-    // 3. Glömda semikolon
-    if (lineContent.includes(':') && !lineContent.endsWith(';') && !lineContent.endsWith('{') && !lineContent.includes('}')) {
-       results.push({
+    // 3. Glömda semikolon & Extra tecken (Syntax Shield Pro)
+    if (lineContent.includes(':') && !lineContent.endsWith('{') && !lineContent.includes('}')) {
+      if (!lineContent.endsWith(';')) {
+        const lastSemicolonIndex = lineContent.lastIndexOf(';');
+        if (lastSemicolonIndex !== -1 && lastSemicolonIndex < lineContent.length - 1) {
+          const extra = lineContent.substring(lastSemicolonIndex + 1).trim();
+          if (extra) {
+            results.push({
+              line: i + 1,
+              category: 'ERROR',
+              severity: 'error',
+              message: `Du har skrivit ett extra "${extra}" i slutet av raden. Ta bort det för att koden ska fungera.`
+            });
+          }
+        } else {
+          results.push({
+            line: i + 1,
+            category: 'ERROR',
+            severity: 'error',
+            message: `Du har glömt ett semikolon (;) i slutet av raden.`
+          });
+        }
+      }
+    }
+
+    // 4. OMNI-AI: Arkitektur-regler (Korta & Koncisa)
+    
+    // Nesting-vakt (Max 3 nivåer för prestanda)
+    const nestingDepth = lineContent.trim().split(/\s+/).filter(s => !['>', '+', '~'].includes(s)).length;
+    if (lineContent.endsWith('{') && nestingDepth > 3) {
+      results.push({
         line: i + 1,
-        category: 'ERROR',
-        severity: 'error',
-        message: `Du har glömt ett semikolon (;) i slutet av raden.`
+        category: 'STRUCTURE',
+        severity: 'warning',
+        message: 'För djup CSS-selektor. Föredra klasser (BEM) för bättre prestanda.'
       });
     }
 
-    // 4. Arkitekt-regler
+    // Box-Sizing Reset påminnelse
+    if (code.includes('*') && !code.includes('box-sizing')) {
+      results.push({
+        line: 1,
+        category: 'BEST_PRACTICE',
+        severity: 'tip',
+        message: 'Tips: Använd "* { box-sizing: border-box; }" för stabilare layout.'
+      });
+    }
+
+    // Standard Arkitekt-regler
     architectRules.forEach(rule => {
       if (rule.regex.test(lineContent)) {
         results.push({

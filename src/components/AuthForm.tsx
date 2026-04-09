@@ -59,6 +59,35 @@ export const AuthForm: React.FC = () => {
 
   return (
     <div className="auth-container">
+      {/* 🟢 HACKER TELEMETRY OVERLAY */}
+      <div className="telemetry-layout">
+        <div className="telemetry-block top-left">
+          <div className="line active">INITIALIZING_SPARKCODE_V10...</div>
+          <div className="line">CORE_STATUS: STABLE</div>
+          <div className="line">ENCRYPTION: AES-256-GCM</div>
+          <div className="line">SENTINEL_SYNC: ACTIVE</div>
+        </div>
+        <div className="telemetry-block top-right">
+          <div className="line">DRIVE_STATUS: LOCAL_MOUNT</div>
+          <div className="line">LATENCY: 1ms</div>
+          <div className="line">IP: 127.0.0.1 (LOCAL)</div>
+          <div className="line">MODE: ARCHITECT_ELITE</div>
+        </div>
+        <div className="telemetry-block bottom-left">
+          <div className="line title">ARCHITECT_BOOT_LOGS v10.0</div>
+          <div className="line">{'>'} Loading structural vakt...</div>
+          <div className="line">{'>'} Calibrating logic scanners...</div>
+          <div className="line">{'>'} Enabling Pulse debugger...</div>
+          <div className="line">{'>'} System Ready.</div>
+        </div>
+        <div className="telemetry-block bottom-right">
+          <div className="line">RADAR_SWEEP: COMPLETED</div>
+          <div className="line">DOM_NODES: 0 (STANDBY)</div>
+          <div className="line">PROJECT_INDEX: ENCRYPTED</div>
+          <div className="line blink">_LISTENING_FOR_OPERATOR_</div>
+        </div>
+      </div>
+
       <div className="auth-card glass-panel">
         <div className="auth-header">
           <div className="logo">
@@ -306,6 +335,52 @@ export const AuthForm: React.FC = () => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        .telemetry-layout {
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          padding: 40px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          z-index: 1;
+          opacity: 0.5;
+        }
+
+        .telemetry-block {
+          font-family: var(--font-mono);
+          font-size: 0.65rem;
+          color: var(--accent-primary);
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .telemetry-block .line {
+          margin-bottom: 5px;
+        }
+
+        .telemetry-block.top-left { border-left: 1px solid var(--accent-primary); padding-left: 10px; }
+        .telemetry-block.top-right { text-align: right; border-right: 1px solid var(--accent-primary); padding-right: 10px; }
+        .telemetry-block.bottom-left { max-width: 250px; }
+        .telemetry-block .title { font-weight: 900; background: rgba(0,255,65,0.1); padding: 2px 5px; margin-bottom: 10px; }
+
+        .telemetry-block .active { color: #fff; background: var(--accent-primary); color: #000; padding: 0 4px; }
+        
+        .blink { animation: auth-blink 1s infinite; }
+        @keyframes auth-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+
+        .auth-card {
+          position: relative;
+          z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+          .telemetry-layout { display: none; }
         }
       `}</style>
     </div>

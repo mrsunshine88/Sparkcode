@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, Search, Code, BookOpen } from 'lucide-react';
+import { X, ExternalLink, Search, Code, BookOpen, Copy, Check } from 'lucide-react';
 import { lexiconData } from '../data/lexicon';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,6 +10,7 @@ interface LexiconOverlayProps {
 
 const LexiconOverlay: React.FC<LexiconOverlayProps> = ({ isOpen, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [copiedTerm, setCopiedTerm] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-fokus på sökfältet när den öppnas + hantera markerad sökning
@@ -37,6 +38,12 @@ const LexiconOverlay: React.FC<LexiconOverlayProps> = ({ isOpen, onClose }) => {
       entry.swedishTerms.some(sw => sw.toLowerCase().includes(term))
     );
   });
+  
+  const handleCopy = (code: string, term: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedTerm(term);
+    setTimeout(() => setCopiedTerm(null), 2000);
+  };
 
   if (!isOpen) return null;
 
@@ -88,8 +95,17 @@ const LexiconOverlay: React.FC<LexiconOverlayProps> = ({ isOpen, onClose }) => {
                   <p className="swedish-desc">{entry.description}</p>
                   
                   <div className="code-block">
-                    <Code size={14} />
-                    <code>{entry.code}</code>
+                    <div className="code-content">
+                      <Code size={14} />
+                      <code>{entry.code}</code>
+                    </div>
+                    <button 
+                      className={`copy-code-btn ${copiedTerm === entry.term ? 'copied' : ''}`}
+                      onClick={() => handleCopy(entry.code || '', entry.term)}
+                      title="Kopiera kod"
+                    >
+                      {copiedTerm === entry.term ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
                   </div>
                 </div>
 

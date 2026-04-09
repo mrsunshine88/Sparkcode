@@ -5,6 +5,7 @@ export interface LintResult {
   message: string;
   category: LintCategory;
   severity: 'error' | 'warning' | 'tip';
+  fileName?: string;
 }
 
 const VALID_HTML_TAGS = new Set([

@@ -7,6 +7,8 @@ export interface AuditReport {
   criticalIssues: string[];
   warnings: string[];
   performanceTips: string[];
+  domCount: number;
+  visualAnomalies: string[];
   timestamp: number;
 }
 
@@ -18,6 +20,8 @@ export const runStructuralAudit = (iframe: HTMLIFrameElement): AuditReport => {
       criticalIssues: ['Kunde inte nå förhandsvisningens DOM.'],
       warnings: [],
       performanceTips: [],
+      domCount: 0,
+      visualAnomalies: [],
       timestamp: Date.now()
     };
   }
@@ -27,6 +31,8 @@ export const runStructuralAudit = (iframe: HTMLIFrameElement): AuditReport => {
     criticalIssues: [],
     warnings: [],
     performanceTips: [],
+    domCount: doc.querySelectorAll('*').length,
+    visualAnomalies: [],
     timestamp: Date.now()
   };
 
@@ -85,6 +91,52 @@ export const runStructuralAudit = (iframe: HTMLIFrameElement): AuditReport => {
       report.score -= 5;
     }
   });
+
+  // 6. VISUAL SENTINEL (Layout & Overflow vakt)
+  const body = doc.body;
+  if (body) {
+    const hasHorizontalScroll = body.scrollWidth > body.clientWidth;
+    if (hasHorizontalScroll) {
+      report.criticalIssues.push('LAYOUT_FEEL: Sidan har horisontell scroll (overflow). Detta förstör mobilupplevelsen.');
+      report.score -= 20;
+    }
+  }
+
+  // Touch-target vakt (BETA)
+  const interactive = doc.querySelectorAll('button, a');
+  interactive.forEach(el => {
+    const rect = (el as HTMLElement).getBoundingClientRect();
+    if (rect.width > 0 && (rect.width < 32 || rect.height < 32)) {
+      report.visualAnomalies.push(`Liten touch-area: "${(el as HTMLElement).innerText?.substring(0, 10)}" är för liten för mobila fingrar.`);
+    }
+  });
+
+  // OMNI-AI: Avancerade arkitektur-checker (Korta & Koncisa)
+  
+  // Mobil-vakt
+  const viewport = doc.querySelector('meta[name="viewport"]');
+  if (!viewport) {
+    report.criticalIssues.push('Viewport-meta saknas. Sidan kommer se trasig ut på mobilen.');
+    report.score -= 20;
+  }
+
+  // Inline-style vakt
+  const inlineStyles = doc.querySelectorAll('[style]');
+  if (inlineStyles.length > 3) {
+    report.warnings.push('För många inline-styles detekterade. Flytta logiken till CSS-filen.');
+    report.score -= 10;
+  }
+
+  // Tomma taggar
+  const empties = doc.querySelectorAll('div:empty, span:empty, p:empty');
+  if (empties.length > 2) {
+    report.performanceTips.push('Hittade tomma element i koden. Rensa bort skräp.');
+  }
+
+  // Lorem Ipsum vakt
+  if (doc.body.innerText.toLowerCase().includes('lorem ipsum')) {
+    report.warnings.push('Du har kvar "Lorem Ipsum"-text (platshållare). Byt ut mot riktigt innehåll.');
+  }
 
   report.score = Math.max(0, report.score);
   return report;

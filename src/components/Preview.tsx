@@ -6,9 +6,13 @@ interface PreviewProps {
   width?: string;
   overrideUrl?: string | null;
   isBlueprintMode?: boolean;
+  onAudit?: (iframe: HTMLIFrameElement) => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+  activePackages?: string[];
 }
 
-const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = null, isBlueprintMode = false }) => {
+const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = null, isBlueprintMode = false, onAudit, isFullscreen, onToggleFullscreen, activePackages = [] }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [debouncedCode, setDebouncedCode] = useState(code);
 
@@ -87,6 +91,59 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
         finalHtml = finalHtml.replace('</head>', `${blueprintStyles}</head>`);
       }
 
+      // 📚 The Librarian (Library Injection)
+      if (activePackages.length > 0) {
+        const packageScripts = activePackages.map(pkg => 
+          `<script type="module">import * as lib from "https://esm.sh/${pkg}"; window.${pkg.replace(/[^a-zA-Z]/g, '')} = lib;</script>`
+        ).join('\n');
+        finalHtml = finalHtml.replace('</head>', `${packageScripts}</head>`);
+      }
+
+      // 🖥️ Sentinel Navigation Injection
+      const navScript = `
+        <script>
+          (function() {
+            document.addEventListener('click', function(e) {
+              const link = e.target.closest('a');
+              if (link && link.getAttribute('href')) {
+                const href = link.getAttribute('href');
+                // Ignorera externa länkar
+                if (href.startsWith('http') || href.startsWith('//')) return;
+                
+                e.preventDefault();
+                window.parent.postMessage({ type: 'NAVIGATE_TO_FILE', path: href }, '*');
+              }
+            }, true);
+
+            // 🩺 The Pulse (Console Interceptor)
+            const captureLog = (type, args) => {
+              window.parent.postMessage({ 
+                type: 'DEBUG_LOG', 
+                level: type, 
+                message: Array.from(args).map(a => 
+                  typeof a === 'object' ? JSON.stringify(a) : String(a)
+                ).join(' '),
+                timestamp: Date.now()
+              }, '*');
+            };
+
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+
+            console.log = function() { captureLog('info', arguments); originalLog.apply(console, arguments); };
+            console.error = function() { captureLog('error', arguments); originalError.apply(console, arguments); };
+            console.warn = function() { captureLog('warn', arguments); originalWarn.apply(console, arguments); };
+
+            window.onerror = function(msg, url, line, col, error) {
+              captureLog('error', [msg + ' at line ' + line]);
+              return false;
+            };
+          })();
+        </script>
+      `;
+      finalHtml = finalHtml.replace('</body>', `${navScript}</body>`);
+
       const linkedHtml = blobManager.linkHtml(finalHtml);
       // Flimmer-skydd: Injicera omedelbar bakgrund innan resten av sidan laddas
       const flickerProtectedHtml = linkedHtml.replace('<head>', '<head><style>body { background-color: white; }</style>');
@@ -108,8 +165,46 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
       display: 'flex', 
       justifyContent: 'center',
       overflow: 'hidden',
-      padding: width === '100%' ? 0 : '20px'
+      padding: width === '100%' ? 0 : '20px',
+      position: 'relative'
     }}>
+      {onToggleFullscreen && (
+        <div style={{
+          position: 'absolute',
+          top: width === '100%' ? '10px' : '20px',
+          right: width === '100%' ? '10px' : '20px',
+          zIndex: 1000,
+          display: 'flex',
+          gap: '8px',
+          background: 'rgba(0,0,0,0.5)',
+          padding: '5px',
+          borderRadius: '4px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <button 
+            className="hacker-button mini" 
+            onClick={() => {
+              const blob = new Blob([blobManager.linkHtml(debouncedCode)], { type: 'text/html' });
+              window.open(URL.createObjectURL(blob), '_blank');
+            }}
+            title="Öppna i ny flik"
+            style={{ fontSize: '0.55rem', padding: '4px 8px' }}
+          >
+            LAUNCH
+          </button>
+          <button 
+            className="hacker-button mini" 
+            onClick={onToggleFullscreen}
+            style={{ 
+              borderColor: isFullscreen ? 'var(--accent-secondary)' : '',
+              fontSize: '0.55rem', 
+              padding: '4px 8px' 
+            }}
+          >
+            {isFullscreen ? 'EXIT' : 'FOCUS'}
+          </button>
+        </div>
+      )}
       <div style={{
         width: width,
         height: '100%',
@@ -129,6 +224,7 @@ const Preview: React.FC<PreviewProps> = ({ code, width = '100%', overrideUrl = n
           }}
           src={overrideUrl || undefined}
           sandbox="allow-scripts allow-same-origin allow-forms"
+          onLoad={() => iframeRef.current && onAudit?.(iframeRef.current)}
         />
       </div>
     </div>

@@ -1,14 +1,23 @@
 import { Zap } from 'lucide-react';
 import SmartCoach from './SmartCoach';
 import type { LintResult } from '../utils/linter';
+import type { DebugLog } from '../App';
 
 interface SidebarProps {
   errors: LintResult[];
   isValid: boolean;
   code: string;
+  activeFileName?: string;
+  projectInsight?: any;
+  domCount?: number;
+  debugLogs?: DebugLog[];
+  baselineCode?: string;
+  bridgeStatus?: 'OFFLINE' | 'CONNECTED';
+  systemMetrics?: { cpu: number; ram: number };
+  onFocusLine?: (line: number, fileName?: string) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ errors, isValid, code }) => {
+const Sidebar: React.FC<SidebarProps> = ({ errors, isValid, code, activeFileName, projectInsight, domCount, debugLogs, baselineCode, bridgeStatus, systemMetrics, onFocusLine }) => {
   return (
     <aside className="sidebar-right">
       <div className="section">
@@ -16,7 +25,19 @@ const Sidebar: React.FC<SidebarProps> = ({ errors, isValid, code }) => {
           <Zap size={20} className="glow-text" />
           <h2 style={{ fontSize: '1rem', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>Smart Coach</h2>
         </div>
-        <SmartCoach errors={errors} isValid={isValid} code={code} />
+        <SmartCoach 
+          errors={errors} 
+          isValid={isValid} 
+          code={code} 
+          activeFileName={activeFileName}
+          projectInsight={projectInsight}
+          domCount={domCount}
+          debugLogs={debugLogs}
+          baselineCode={baselineCode}
+          bridgeStatus={bridgeStatus}
+          systemMetrics={systemMetrics}
+          onFocusLine={onFocusLine} 
+        />
       </div>
 
       <div className="mentor-shortcut-tips" style={{ marginTop: 'auto', padding: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.05)' }}>
