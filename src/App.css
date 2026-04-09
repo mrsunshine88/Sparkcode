@@ -1515,12 +1515,20 @@
 .sync-pill.error { color: var(--error-color); }
 .sync-pill.idle { color: var(--text-muted); }
 
-.lexicon-glow-button {
+.action-cluster {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.glow-action-button {
   background: transparent;
   border: 1px solid var(--accent-primary);
   color: var(--accent-primary);
   border-radius: 4px;
-  padding: 4px 12px;
+  padding: 4px 14px;
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 800;
@@ -1530,12 +1538,24 @@
   cursor: pointer;
   transition: all 0.3s;
   box-shadow: 0 0 5px rgba(0, 255, 65, 0.1);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-.lexicon-glow-button:hover {
-  background: rgba(0, 255, 65, 0.05);
+.glow-action-button.secondary {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+  box-shadow: 0 0 5px rgba(168, 85, 247, 0.1);
+}
+
+.glow-action-button:hover {
+  background: rgba(255, 255, 255, 0.05);
   box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
   transform: translateY(-1px);
+}
+
+.glow-action-button.secondary:hover {
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
 }
 
 .github-push-pill {

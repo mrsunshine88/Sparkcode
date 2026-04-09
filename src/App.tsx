@@ -1303,7 +1303,7 @@ function App() {
             
             <button 
               onClick={() => setIsLexiconOpen(true)} 
-              className="lexicon-glow-button"
+              className="glow-action-button secondary"
               title="Öppna Kod-Lexikon"
             >
               <BookOpen size={14} />
@@ -1312,9 +1312,8 @@ function App() {
 
             <button 
               onClick={() => setIsTerminalOpen(true)} 
-              className="hacker-button cto-terminal-button"
+              className="glow-action-button primary"
               title="Fråga din CTO"
-              style={{ fontWeight: '900', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' }}
             >
               <Bot size={14} />
               <span>ASK_CTO</span>
