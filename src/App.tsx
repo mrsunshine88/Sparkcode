@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, 
+  Zap, Terminal, Eye, Link, FolderOpen, BookOpen, User, Bot,
   GitBranch, PlusSquare, History as HistoryIcon, X, Info, Globe, Settings, Lock, Download
 } from 'lucide-react';
 import CodeEditor from './components/Editor';
@@ -1309,6 +1309,16 @@ function App() {
               <BookOpen size={14} />
               <span>LEXIKON</span>
             </button>
+
+            <button 
+              onClick={() => setIsTerminalOpen(true)} 
+              className="hacker-button cto-terminal-button"
+              title="Fråga din CTO"
+              style={{ fontWeight: '900', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' }}
+            >
+              <Bot size={14} />
+              <span>ASK_CTO</span>
+            </button>
           </div>
         </div>
       </header>
@@ -1321,13 +1331,6 @@ function App() {
           </div>
           <button className="hacker-button audit-button" onClick={handleRunAudit}>
             RUN
-          </button>
-          <button 
-            className="hacker-button audit-button" 
-            style={{ fontWeight: '900', color: 'var(--accent-primary)', fontSize: '0.65rem' }}
-            onClick={() => setIsTerminalOpen(true)}
-          >
-            ASK_CHEF
           </button>
           <div className="status-divider"></div>
           <div className={`status-advice ${topError ? 'has-error' : ''}`}>
@@ -1364,6 +1367,14 @@ function App() {
               <div className="user-profile">
                 <User size={16} />
                 <span>{session.user.email}</span>
+              </div>
+              <div 
+                className="hacker-button" 
+                onClick={() => { setIsTerminalOpen(true); setIsMobileMenuOpen(false); }}
+                style={{ width: '100%', marginTop: '10px', justifyContent: 'center', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' }}
+              >
+                <Bot size={16} />
+                <span style={{ fontWeight: '900' }}>ASK_CTO</span>
               </div>
               <div className="system-status">
                 <span style={{ color: isValid ? 'var(--accent-primary)' : 'var(--error-color)' }}>

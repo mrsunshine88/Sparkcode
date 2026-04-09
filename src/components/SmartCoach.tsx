@@ -22,6 +22,10 @@ const SmartCoach: React.FC<SmartCoachProps> = ({ errors, isValid, code, activeFi
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'REPORT' | 'LOGS' | 'DIFF'>('REPORT');
   const isCodeEmpty = !code.trim() || code.includes('Välj en fil för att börja koda');
+  
+  const lineCount = code.split('\n').length;
+  const isSketching = lineCount < 25 && !code.includes('<body');
+  const level = projectInsight?.experienceLevel || 'JUNIOR';
 
   // Blueprint bibliotek för vanliga fel
   const BLUEPRINTS: Record<string, { title: string; code: string }> = {
@@ -107,12 +111,14 @@ const SmartCoach: React.FC<SmartCoachProps> = ({ errors, isValid, code, activeFi
       <div className="coach-panel success">
         <div className="coach-header">
           <CheckCircle2 size={18} />
-          <span>INTEGRITY_VERIFIED</span>
+          <span>{isSketching ? 'SKISS_GODKÄND' : 'INTEGRITY_VERIFIED'}</span>
         </div>
         <div className="wisdom-section">
-          <span className="wisdom-label">ARCHITECT_LOG</span>
+          <span className="wisdom-label">ARCHITECT_LOG | {level}_LEVEL</span>
           <p className="coach-message">
-            "Inga strukturella avvikelser detekterade i den aktiva filen. Systemet är stabilt."
+            {isSketching 
+              ? '"Snygg start på din nät-arkitektur. Jag håller koll på detaljerna i bakgrunden medan du skapar."'
+              : '"Inga strukturella avvikelser detekterade. Systemet är stabilt och redo för produktion."'}
           </p>
         </div>
       </div>
@@ -144,9 +150,12 @@ const SmartCoach: React.FC<SmartCoachProps> = ({ errors, isValid, code, activeFi
       </div>
 
       <div className="coach-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
           <Terminal size={18} className="glow-icon" />
-          <span>LEAD ARCHITECT (AUDIT)</span>
+          <span style={{ whiteSpace: 'nowrap' }}>{isSketching ? 'CREATIVE_SKETCH' : 'LEAD ARCHITECT'}</span>
+          <span className={`bridge-badge level-${level.toLowerCase()}`}>
+            {level}
+          </span>
           <span className={`bridge-badge ${bridgeStatus.toLowerCase()}`}>
             {bridgeStatus}
           </span>
@@ -326,6 +335,8 @@ const SmartCoach: React.FC<SmartCoachProps> = ({ errors, isValid, code, activeFi
         .coach-header {
           display: flex;
           align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
           gap: 8px;
           font-size: 0.75rem;
           font-weight: 800;
@@ -733,6 +744,11 @@ const SmartCoach: React.FC<SmartCoachProps> = ({ errors, isValid, code, activeFi
           border: 1px solid var(--accent-primary);
           box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
         }
+
+        .level-junior { background: rgba(255, 140, 0, 0.1); color: #ffa500; border: 1px solid #ffa500; }
+        .level-mid { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid #3b82f6; }
+        .level-senior { background: rgba(168, 85, 247, 0.1); color: #a855f7; border: 1px solid #a855f7; }
+        .level-expert { background: rgba(0, 255, 65, 0.1); color: var(--accent-primary); border: 1px solid var(--accent-primary); }
       `}</style>
     </div>
   );

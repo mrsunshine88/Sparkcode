@@ -12,6 +12,7 @@ export interface ProjectInsight {
   dependencies: Map<string, string[]>; // fil -> [referenser]
   logicComplexity: Map<string, number>; // fil -> poäng baserat på funktioner/rader
   namingViolations: { path: string; reason: string }[];
+  experienceLevel: 'JUNIOR' | 'MID' | 'SENIOR' | 'EXPERT';
 }
 
 /**
@@ -30,7 +31,15 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
     referencedAssets: new Set(),
     dependencies: new Map(),
     logicComplexity: new Map(),
-    namingViolations: []
+    namingViolations: [],
+    experienceLevel: 'JUNIOR'
+  };
+
+  let experienceScore = 0;
+  const advancedPatterns = {
+    hasModularFolders: false,
+    hasAdvancedCSS: false,
+    hasSolidNaming: true
   };
 
   const PROFFS_NAMING_REGEX = /^[a-zA-Z0-9._-]+$/;
@@ -46,6 +55,9 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
       const entryPath = path ? `${path}/${entry.name}` : entry.name;
       
       if (entry.kind === 'directory') {
+        if (['src', 'components', 'utils', 'services', 'lib', 'api'].includes(entry.name)) {
+          advancedPatterns.hasModularFolders = true;
+        }
         await traverse(entry, entryPath);
       } else {
         insight.files.push(entryPath);
@@ -100,12 +112,10 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
             }
           } else if (entry.name.endsWith('.js')) {
             // CTO Evolution: Logisk analys
-            // Hitta funktioner
             const funcCount = (content.match(/function\s+\w+|=>/g) || []).length;
             const lineCount = content.split('\n').length;
             insight.logicComplexity.set(entryPath, funcCount + (lineCount / 10));
 
-            // Hitta beroenden (import/fetch/länkar)
             const deps: string[] = [];
             const importMatches = content.matchAll(/(?:import|from)\s+["']([^"']+)["']/gi);
             for (const match of importMatches) {
@@ -113,7 +123,6 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
             }
             insight.dependencies.set(entryPath, deps);
           } else if (entry.name.endsWith('.java')) {
-            // ☕ Java Intelligence
             const lineCount = content.split('\n').length;
             const classCount = (content.match(/class\s+\w+|@Component|@Service/g) || []).length;
             insight.logicComplexity.set(entryPath, classCount + (lineCount / 20));
@@ -125,7 +134,6 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
             }
             insight.dependencies.set(entryPath, deps);
           } else if (entry.name.endsWith('.cpp') || entry.name.endsWith('.h') || entry.name.endsWith('.cc')) {
-            // ⚙️ C++ Intelligence
             const lineCount = content.split('\n').length;
             const funcCount = (content.match(/\w+\s+\w+\s*\([^)]*\)\s*\{/g) || []).length;
             insight.logicComplexity.set(entryPath, funcCount + (lineCount / 15));
@@ -137,7 +145,6 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
             }
             insight.dependencies.set(entryPath, deps);
           } else if (entry.name.endsWith('.py')) {
-            // 🐍 Python Intelligence
             const lineCount = content.split('\n').length;
             const defCount = (content.match(/def\s+\w+|class\s+\w+/g) || []).length;
             insight.logicComplexity.set(entryPath, defCount + (lineCount / 10));
@@ -149,6 +156,10 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
             }
             insight.dependencies.set(entryPath, deps);
           }
+
+          if (content.includes('--') || content.includes('grid-') || content.includes('@media')) {
+            advancedPatterns.hasAdvancedCSS = true;
+          }
         } catch (e) {
           console.warn(`Kunde inte skanna filen ${entryPath}`, e);
         }
@@ -157,5 +168,21 @@ export const scanProject = async (directoryHandle: FileSystemDirectoryHandle): P
   };
 
   await traverse(directoryHandle);
+
+  // --- Experience Scoring Engine ---
+  if (advancedPatterns.hasModularFolders) experienceScore += 3;
+  if (advancedPatterns.hasAdvancedCSS) experienceScore += 2;
+  if (insight.namingViolations.length === 0) experienceScore += 2;
+  if (insight.dependencies.size > 3) experienceScore += 2;
+  
+  const totalComplexity = Array.from(insight.logicComplexity.values()).reduce((a, b) => a + b, 0);
+  if (totalComplexity > 50) experienceScore += 3;
+  else if (totalComplexity > 20) experienceScore += 1;
+
+  if (experienceScore >= 10) insight.experienceLevel = 'EXPERT';
+  else if (experienceScore >= 7) insight.experienceLevel = 'SENIOR';
+  else if (experienceScore >= 4) insight.experienceLevel = 'MID';
+  else insight.experienceLevel = 'JUNIOR';
+
   return insight;
 };

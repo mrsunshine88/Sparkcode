@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, Bot } from 'lucide-react';
 import type { ProjectInsight } from '../services/projectScanner';
+import { lexiconData } from '../data/lexicon';
 
 interface Message {
   id: string;
@@ -36,8 +37,24 @@ const CtoTerminal: React.FC<CtoTerminalProps> = ({ insight, activeFileName, onCl
   }, [messages, isTyping]);
 
   const generateResponse = (query: string): string => {
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     
+    // 1. Sök i Lexikonet först för tekniska frågor
+    const lexiconMatch = lexiconData.find(item => 
+      q.includes(item.term.toLowerCase()) || 
+      item.swedishTerms.some(t => q.includes(t.toLowerCase()))
+    );
+
+    if (lexiconMatch) {
+      return `Teknisk instruktion identifierad: ${lexiconMatch.term.toUpperCase()}.
+"${lexiconMatch.description}"
+
+Exempelkod:
+${lexiconMatch.code}
+
+Lycka till med implementeringen!`;
+    }
+
     if (q.includes('fil') || q.includes('mapp')) {
       return `Projektet består av ${insight?.files.length || 0} filer fördelade på ${insight?.folders.length || 0} mappar. Just nu arbetar du i ${activeFileName}.`;
     }
@@ -52,11 +69,18 @@ const CtoTerminal: React.FC<CtoTerminalProps> = ({ insight, activeFileName, onCl
       return `Min skanner har flaggat ${issues} strukturella avvikelser i projektet. Kolla Audit-loggen i sidomenyn för detaljer per fil.`;
     }
 
-    if (q.includes('hej') || q.includes('tjena')) {
-      return "Hälsningar, arkitekt. Jag är redo. Ställ tekniska frågor om projektets struktur eller prestanda.";
+    if (q === 'help' || q === 'hjälp' || q === '?') {
+      return `SparkCode V10.0 Senior Commands:
+- pkg add <namn> : Installera externa bibliotek (t.ex. gsap, react)
+- snapshot save : Spara ett tillstånd för Visual Diff
+- bridge connect : Aktivera Command Bridge till din dator
+- logs clear : Rensa alla debug-loggar
+- audit : Kör en djupanalys av projektet
+
+Skriv "lexikon" eller sök i LEXIKON-menyn för detaljerade kodexempel.`;
     }
 
-    return "Jag förstår din fråga. Ur ett arkitektoniskt perspektiv är det viktigt att vi håller koden modulär och konsekvent. Kan du precisera vad i koden du undrar över?";
+    return "Jag förstår din fråga. Ur ett arkitektoniskt perspektiv är det viktigt att vi håller koden modulär och konsekvent. Skriv 'hjälp' för att se alla operativa kommandon.";
   };
 
   const handleSend = () => {

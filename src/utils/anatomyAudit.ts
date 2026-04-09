@@ -9,13 +9,19 @@ import { checkTextSpelling } from "../services/spellService";
 export const auditAnatomy = (insight: ProjectInsight, activeCode: string, activeFileName: string): LintResult[] => {
   const results: LintResult[] = [];
 
+  const lineCount = activeCode.split('\n').length;
+  const isSketching = lineCount < 25 && !activeCode.includes('<body');
+  const level = insight.experienceLevel;
+
   // 1. Kontrollera namngivningsfel från skanningen
   insight.namingViolations.forEach(v => {
     results.push({
       line: 1,
       category: 'STRUCTURE' as any,
-      severity: 'error',
-      message: `NAMNGIVNINGSFEL: "${v.path}" - ${v.reason}`,
+      severity: level === 'EXPERT' ? 'warning' : 'error',
+      message: level === 'JUNIOR' 
+        ? `FILNAMN: "${v.path}" följer inte standard. Prova att använda gemener och undvika mellanslag för bättre kompatibilitet.`
+        : `NAMNGIVNINGSFEL: "${v.path}" - ${v.reason}`,
       fileName: v.path
     });
   });
@@ -35,7 +41,7 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
           line,
           category: 'STRUCTURE' as any,
           severity: 'error',
-          message: `BRUTEN LÄNK: "${path}" hittades inte i projektet.`,
+          message: `BRUTEN LÄNK: "${path}" hittades inte i projektet (Kontrollera stavningen).`,
           fileName: activeFileName
         });
       }
@@ -48,7 +54,6 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
     let match;
     while ((match = importRegex.exec(activeCode)) !== null) {
       const imp = match[1];
-      // Ignorera standard-bibliotek
       if (imp.startsWith('java.') || imp.startsWith('javax.')) continue;
       
       const className = imp.split('.').pop()!;
@@ -60,7 +65,7 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
           line,
           category: 'STRUCTURE' as any,
           severity: 'warning',
-          message: `BRUTEN IMPORT: "${imp}" hittades inte i projektet.`,
+          message: `BRUTEN IMPORT: "${imp}" hittades inte.`,
           fileName: activeFileName
         });
       }
@@ -70,7 +75,7 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
     let match;
     while ((match = includeRegex.exec(activeCode)) !== null) {
       const inc = match[1];
-      if (inc.includes('.')) { // Skip standard headers like <iostream>
+      if (inc.includes('.')) { 
         const exists = insight.files.some(f => f.endsWith(inc));
         if (!exists) {
           const line = activeCode.substring(0, match.index).split('\n').length;
@@ -78,7 +83,7 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
             line,
             category: 'STRUCTURE' as any,
             severity: 'warning',
-            message: `BRUTEN INCLUDE: "${inc}" hittades inte i projektet.`,
+            message: `BRUTEN INCLUDE: "${inc}" hittades inte.`,
             fileName: activeFileName
           });
         }
@@ -86,34 +91,8 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
     }
   }
 
-  // 2.2 Backend Naming Professionalism
-  if (activeFileName.endsWith('.java') || activeFileName.endsWith('.cpp') || activeFileName.endsWith('.h')) {
-    const fileName = activeFileName.split('/').pop()!;
-    const baseName = fileName.split('.')[0];
-    if (!/^[A-Z][a-zA-Z0-9]*$/.test(baseName)) {
-      results.push({
-        line: 1,
-        category: 'STRUCTURE' as any,
-        severity: 'tip',
-        message: `NAMNGIVNING: Backend-klasser (${baseName}) bör vanligtvis använda PascalCase.`,
-        fileName: activeFileName
-      });
-    }
-  } else if (activeFileName.endsWith('.py')) {
-    const fileName = activeFileName.split('/').pop()!;
-    if (!/^[a-z0-9_]+$/.test(fileName.split('.')[0])) {
-      results.push({
-        line: 1,
-        category: 'STRUCTURE' as any,
-        severity: 'tip',
-        message: `NAMNGIVNING: Python-moduler bör använda snake_case.`,
-        fileName: activeFileName
-      });
-    }
-  }
-
   // 3. Kontrollera saknade CSS-klasser (Cross-Check)
-  if (activeFileName.endsWith('.html')) {
+  if (activeFileName.endsWith('.html') && !isSketching) {
     const classMatches = activeCode.matchAll(/class=["']([^"']+)["']/gi);
     for (const match of classMatches) {
       const line = activeCode.substring(0, match.index).split('\n').length;
@@ -122,8 +101,8 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
           results.push({
             line,
             category: 'BEST_PRACTICE' as any,
-            severity: 'tip', // Tips istället för error eftersom vi inte vill blockera
-            message: `LOGISK LÄNK: Klassen ".${cls}" finns inte definierad i någon CSS-fil.`,
+            severity: 'tip',
+            message: `LOGISK LÄNK: Klassen ".${cls}" finns inte definierad i din CSS ännu.`,
             fileName: activeFileName
           });
         }
@@ -132,117 +111,54 @@ export const auditAnatomy = (insight: ProjectInsight, activeCode: string, active
   }
 
   // 4. Design System Guard (Färg-inkonsekvens)
-  if (insight.colors.size > 8) {
+  if (insight.colors.size > 10 && !isSketching) {
     results.push({
       line: 1,
       category: 'BEST_PRACTICE' as any,
       severity: 'warning',
-      message: `DESIGN_SYSTEM: Du använder ${insight.colors.size} olika färger. Överväg att definiera variabler för att hålla projektet enhetligt.`,
+      message: `DESIGN_SYSTEM: Du använder ${insight.colors.size} olika färger. För en professionell look, prova att använda CSS-variabler.`,
       fileName: activeFileName
     });
   }
 
-  // 5. Asset Optimizer (Tunga filer & Oanvända Assets)
-  insight.assetSizes.forEach((size, path) => {
-    if (size > 1024 * 1024) { // 1MB
-      results.push({
-        line: 1,
-        category: 'BEST_PRACTICE' as any,
-        severity: 'warning',
-        message: `PRESTANDA: Filen "${path}" är tung (${(size / 1024 / 1024).toFixed(1)} MB). Överväg att komprimera den.`,
-        fileName: path
-      });
-    }
-  });
-
-  // Hitta oanvända filer
-  insight.files.forEach(file => {
-    const isImageOrFont = /\.(png|jpg|jpeg|gif|svg|woff2?|ttf)$/i.test(file);
-    if (isImageOrFont && !insight.referencedAssets.has(file.split('/').pop()!)) {
-      results.push({
-        line: 1,
-        category: 'BEST_PRACTICE' as any,
-        severity: 'tip',
-        message: `RENSNING: Filen "${file}" verkar inte användas i koden. Ta bort den för att spara plats.`,
-        fileName: file
-      });
-    }
-  });
-
-  // 6. Security Shield (Enkel Webb-säkerhet)
-  if (activeCode.includes('eval(') || activeCode.includes('innerHTML')) {
-    results.push({
-      line: 1, // Förenklat för beta
-      category: 'STRUCTURE' as any,
-      severity: 'warning',
-      message: `SÄKERHET: Upptäckte potentiellt osäkra mönster (eval/innerHTML). Använd säkrare alternativ som textContent.`,
-      fileName: activeFileName
-    });
-  }
-
-  // 7. SEO & Semantic Intellect
+  // 7. SEO & Semantic Intellect (Mjukare vid skiss)
   if (activeFileName.endsWith('.html')) {
     if (!activeCode.toLowerCase().includes('<title>')) {
       results.push({
         line: 1,
         category: 'SEMANTIC' as any,
-        severity: 'error',
-        message: `SEO: Sidan saknar en <title>-tagg. Detta är kritiskt för sökbarhet.`,
+        severity: isSketching ? 'tip' : 'error',
+        message: isSketching 
+          ? 'TIPS: Glöm inte att lägga till en <title> för fliken senare.' 
+          : 'SEO: Sidan saknar en <title>-tagg. Detta är kritiskt för sökbarhet.',
         fileName: activeFileName
       });
     }
-    if (!activeCode.toLowerCase().includes('meta name="description"')) {
+    if (!activeCode.toLowerCase().includes('meta name="description"') && !isSketching) {
       results.push({
         line: 1,
         category: 'SEMANTIC' as any,
         severity: 'warning',
-        message: `SEO: Sidan saknar en meta-beskrivning.`,
+        message: `SEO: Sidan saknar en beskrivning för Google.`,
         fileName: activeFileName
       });
     }
 
     // 8. Lexical Precision (Stavning & Grammatik i HTML)
-    // Extrahera text mellan taggar: <p>Text</p>, <h1>Text</h1> osv.
-    const textRegex = />([^<]{4,})</g;
-    let textMatch;
-    while ((textMatch = textRegex.exec(activeCode)) !== null) {
-      const text = textMatch[1].trim();
-      if (!text) continue;
-
-      const line = activeCode.substring(0, textMatch.index).split('\n').length;
-
-      // Kontrollera stavning
-      const typos = checkTextSpelling(text);
-      if (typos.length > 0) {
-        results.push({
-          line,
-          category: 'LEXICAL' as any,
-          severity: 'warning',
-          message: `STAVFEL: Upptäckte möjliga stavfel: ${typos.join(', ')}`,
-          fileName: activeFileName
-        });
-      }
-
-      // Kontrollera grammatik (Meningar i beskrivningar)
-      if (text.length > 20) {
-        const startsWithCap = /^[A-ZÅÄÖ]/.test(text);
-        const endsWithPeriod = /[.!?]$/.test(text);
-
-        if (!startsWithCap) {
+    if (!isSketching) {
+      const textRegex = />([^<]{4,})</g;
+      let textMatch;
+      while ((textMatch = textRegex.exec(activeCode)) !== null) {
+        const text = textMatch[1].trim();
+        if (!text) continue;
+        const line = activeCode.substring(0, textMatch.index).split('\n').length;
+        const typos = checkTextSpelling(text);
+        if (typos.length > 0) {
           results.push({
             line,
             category: 'LEXICAL' as any,
-            severity: 'tip',
-            message: `GRAMMATIK: Meningar bör börja med stor bokstav i beskrivningar.`,
-            fileName: activeFileName
-          });
-        }
-        if (!endsWithPeriod) {
-          results.push({
-            line,
-            category: 'LEXICAL' as any,
-            severity: 'tip',
-            message: `GRAMMATIK: Glöm inte punkt (.) i slutet av din beskrivning.`,
+            severity: 'warning',
+            message: `STAVNING: Hittade möjliga stavfel: ${typos.join(', ')}`,
             fileName: activeFileName
           });
         }

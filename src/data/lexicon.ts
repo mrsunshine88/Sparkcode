@@ -407,5 +407,53 @@ export const lexiconData: LexiconEntry[] = [
       w3s: 'https://www.w3schools.com/js/js_json.asp',
       dev: 'https://devdocs.io/javascript/global_objects/json'
     }
+  },
+  {
+    term: 'pkg add (Virtual Package Manager)',
+    category: 'js',
+    code: 'pkg add <namn>',
+    description: 'Installerar externa bibliotek (React, GSAP, etc.) direkt i ditt projekt via CDN.',
+    swedishTerms: ['installera', 'bibliotek', 'library', 'paket', 'terminal', 'kommandon'],
+    links: {
+      mdn: 'https://esm.sh',
+      w3s: 'https://www.w3schools.com/js/js_versions.asp',
+      dev: 'https://devdocs.io/javascript/'
+    }
+  },
+  {
+    term: 'snapshot save (Time Traveler)',
+    category: 'js',
+    code: 'snapshot save',
+    description: 'Sparar ett tillstånd av din kod för att senare kunna jämföra ändringar med Visual Diff.',
+    swedishTerms: ['spara version', 'checkpoint', 'historik', 'diff', 'terminal', 'kommandon'],
+    links: {
+      mdn: 'https://git-scm.com/docs/git-commit',
+      w3s: 'https://www.w3schools.com/git/git_commit.asp',
+      dev: 'https://devdocs.io/git/'
+    }
+  },
+  {
+    term: 'bridge connect (Command Bridge)',
+    category: 'js',
+    code: 'bridge connect',
+    description: 'Kopplar ihop SparkCode med din dators lokala agent för att aktivera backend-kraft.',
+    swedishTerms: ['anslut maskin', 'lokal brygga', 'system', 'terminal', 'offline', 'kommandon'],
+    links: {
+      mdn: 'https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API',
+      w3s: 'https://www.w3schools.com/nodejs/nodejs_filesystem.asp',
+      dev: 'https://devdocs.io/javascript/'
+    }
+  },
+  {
+    term: 'logs clear (The Pulse)',
+    category: 'js',
+    code: 'logs clear',
+    description: 'Rensar alla aktiva debug-loggar från din Live Pulse-monitor.',
+    swedishTerms: ['rensa loggar', 'tömma', 'debug', 'terminal', 'kommandon'],
+    links: {
+      mdn: 'https://developer.mozilla.org/en-US/docs/Web/API/console/clear',
+      w3s: 'https://www.w3schools.com/jsref/met_console_clear.asp',
+      dev: 'https://devdocs.io/javascript/api/console/clear'
+    }
   }
 ];
