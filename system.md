@@ -1,80 +1,106 @@
-# Berättelsen om SparkCode: En Arkitektonisk Saga 🏛️💎🚀
+# SparkCode: Det Tekniska Manifestet v5.0 (Senior Architect Edition) 🏛️🛡️🚀💎🦾
 
-Detta är inte en teknisk manual. Detta är historien om hur SparkCode andas, ser och agerar. Det är en berättelse om teknik som möter mänsklig kreativitet, där varenda knapp har en själ och varje kodsträng har ett syfte. Vi ska nu vandra genom systemets alla korridorer, från de dolda källarvalven i molnet till de glimrande kontrollpanelerna i din hand.
-
----
-
-## Prolog: Maskinens Födelse
-SparkCode skapades ur en dröm om total frihet. Förr var en utvecklare bunden vid ett tungt skrivbord, men vi ville att arkitekturen skulle vara lika mobil som tanken. Systemet är byggt som en hybrid – en varelse som lever i din webbläsare men som har rötter djupt ner i din dators hårdisk via det vi kallar **File System Access API**. Detta är det första miraklet: att en hemsida kan be om lov att få röra vid dina riktiga filer och spara dina framsteg direkt på din skiva, utan att du behöver ladda upp något till en främmande server.
+Detta dokument är den slutgiltiga tekniska specifikationen för SparkCode-plattformen. Det är skrivet för seniora ingenjörer och systemarkitekter som kräver en djupgående förståelse för hur systemet hanterar state, synkronisering, lokal persistens och AI-heuristik.
 
 ---
 
-## Kapitel 1: Portväktaren vid ARKIV-menyn 📂
-När du drar med fingret över ordet **ARKIV**, öppnar du dörren till systemets innersta kontrollrum. Här sitter portväktarna som hanterar projektets livscykel.
+## 1. Systemarkitektur & Runtime Hybridisering 🏗️
 
-När du klickar på **NYTT PROJEKT**, händer något drastiskt bakom kulisserna. Systemet tar ett djupt andetag och genomför en total inre rening. Varje variabel nollställs, alla tidigare fil-kopplingar raderas och minnet töms. Varför? För att en arkitekt aldrig ska behöva börja på ett nytt bygge med damm från det förra. Det är en garanti för renhet.
+SparkCode opererar i ett unikt hybridläge mellan webbläsarens sandlåda och det lokala operativsystemets filsystem.
 
-Sedan har vi **SENASTE PROJEKT**. Detta är SparkCodes minne. Genom att använda en teknik som kallas `LocalStorage`, sparar systemet små digitala fotspår av de mappar du har besökt. Det är som en karta över dina tidigare uppdrag, så att du aldrig behöver famla i mörkret efter dina filer. Ett enda klick väcker liv i de gamla kopplingarna.
+### 1.1. Native File System Access API
+På desktop-enheter utnyttjar systemet **Native File System Access API**. 
+*   **Asynkron I/O:** Vi använder `async/await` mönster för att interagera med `FileSystemDirectoryHandle` och `FileSystemFileHandle`.
+*   **Permission Lifecycle:** Eftersom filhandtag (handles) är flyktiga mellan sessioner, implementerar vi ett säkerhetsflöde där vi sparar handtag i **IndexedDB**. Vid omstart triggas en "Permission Challenge" via `verifyPermission(handle)` där användaren måste ge sitt godkännande genom en explicit UI-interaktion (User Gesture), vilket krävs av W3C-specifikationen.
 
-Men vad vore en arkitekt utan ordning? Här möter vi **FORMATERA KOD (PRETTIER)**. Det är systemets estetik-vakt. Den tar din råa, kanske lite slarviga kod, och skickar den genom en motor som kallas Prettier. Denna motor förstår skönheten i symmetri och indenterar varje rad perfekt. Varför lägger vi så mycket kraft på detta? För att snygg kod är lättläst kod, och lättläst kod är kod utan fel.
-
-För de krigare som har vandrat länge i kodens källarvalv finns **VIM-LÄGE**. Det är en hyllning till de gamla mästarna, där tangentbordet blir ditt enda verktyg. Genom att injicera en logik i editorn som ändrar hur varje knapptryck tolkas, kan du koda med en hastighet som vanliga dödliga bara kan drömma om.
-
-Slutligen, när dagen är slut, har vi **EXPORTERA (ZIP)**. Detta är projektets livförsäkring. SparkCode samlar ihop varenda liten fil, varenda bild och varje skript, och väver samman dem till en enda komprimerad paketfil. Det är som att packa ner en hel katedral i en liten väska, redo att tas med till nästa stad.
-
----
-
-## Kapitel 2: Den Eteriska Kopplingen till Molnet och GitHub 🌉☁️
-Nu lämnar vi den lokala jorden och blickar upp mot molnen. SparkCode är inte ensam; den har en mekanisk koppling till världsalltet.
-
-Överst i din panel ser du en ikon med en blixt – detta är **AUTO-MOLNSYNK**. Det är ett löfte om evigt liv för din kod. Genom att prata med en tjänst som heter **Supabase**, viskar SparkCode varje ändring du gör upp till molnet. Om din enhet skulle försvinna, kan du logga in på en annan och se din kod manifesteras precis där du lämnade den.
-
-Men den största stoltheten är **GITHUB PUSH**. Detta är ingen enkel knapp; det är en komplex diplomatisk process. När du trycker på den, börjar SparkCode en dialog med GitHubs servrar. Den skapar en digital avbild av dina filer (en "blob"), bygger ett logiskt träd av dem, och skapar sedan en "commit" – ett historiskt dokument över din prestation. Varför gör vi detta? För att riktig kodning handlar om historia och samarbete. Att kunna skicka din arkitektur till världens största kod-bibliotek direkt från din telefon är ren magi.
-
-Här finns också **CLOUD EXPLORER**. Det är ett fönster mellan två världar. Här kan du se dina officiella projekt på GitHub sida vid sida med dina privata filer i Spark-molnet. Det är total överblick, utan att du någonsin behöver byta flik.
+### 1.2. Virtual Data Mapping (BlobManager.ts)
+När körvänliga lokala filer inte är tillgängliga (t.ex. på mobila enheter eller vid molnsynk), aktiveras vår virtuella mappningsmotor:
+*   **Object URLs:** Vi transformerar kodsträngar till dymaniska Blobs via `URL.createObjectURL(new Blob([content], { type: 'text/html' }))`.
+*   **Recursive Link Rewriting:** `BlobManager` skannar koden efter tillgångar (images, links, scripts) och mappar om dessa till korresponderande interna Blobs. Detta skapar ett isolerat virtuellt universum som exekveras i en sandlådad Iframe utan latens.
+*   **Garbage Collection:** För att förhindra minnesläckage anropar vi systematiskt `URL.revokeObjectURL` vid varje filuppdatering eller radering.
 
 ---
 
-## Kapitel 3: Det Allvetande Ögat – Lead Architect 🧠🩺
-I sidomenyn och i headern lever systemets hjärna. Detta är **SmartCoach**, din ständige följeslagare.
+## 2. PWA Sentinel: Adaptiv Installation & Service Workers 📱
 
-Se på den lilla gröna pricken – **System Status Pill**. Det är systemets hjärta. Den lyssnar konstant. Varje gång du skriver en bokstav, skickar den vågor genom systemets skannrar. Om den hittar ett logiskt brott eller en bruten länk, färgas den röd. Det är en varning om att arkitekturen blöder.
+SparkCode är inte bara en hemsida; det är en installerbar plattform som känner av sin omgivning.
 
-Men Arkitekten nöjer sig inte med att bara varna; den ger dig **ADVICE**. Denna rad med text är framdriven av AI-analys som tittar på hela ditt projekt samtidigt. Den ser saker som du kanske missar: en färg som inte passar in, en länk som leder ingenstans, eller en mening i din HTML som behöver stor bokstav.
+### 2.1. Intelligent Platform Detection (PWA Sentinel)
+Implementerad i `PwaPrompt.tsx`, använder systemet en rigorös detekteringsmatris för att guida användaren till installation:
+*   **iOS/Safari Matris:** Vi detekterar iPad/iPhone/iPod via `navigator.userAgent`. Vi exkluderar explicit `MSStream` (legacy WP-check). Vi verifierar "äkta" Safari genom att söka efter `safari` men utesluta `chrome|crios`. Om dessa kriterier uppfylls, aktiveras en skräddarsydd guide för iOS "Share Sheet" installation.
+*   **Android/Chromium Engine:** Vi fångar det nativa `beforeinstallprompt`-eventet. Vi anropar `e.preventDefault()` för att blockera webbläsarens enkla prompt och istället "stasha" eventet i ett internt state (`deferredPrompt`). Detta tillåter oss att erbjuda en premium, glödande "LADDA NER APPEN"-knapp som smälter in i hackers-estetiken.
+*   **Display Mode Isolation:** Vi använder `window.matchMedia('(display-mode: standalone)')` för att helt dölja installationsinslag om appen redan körs i sitt installerade läge.
 
-Bakom kulisserna körs **Deep Audit**. Det är en röntgenstråle som går igenom projektet i tre nivåer:
-1.  **Strukturell Precision:** Ser till att alla delar sitter ihop.
-2.  **Semantisk Intelligens:** Ser till att sökmotorer förstår vad du bygger.
-3.  **Lexikal Vakt:** En språkpolis som ser till att din text är vacker och felfri.
-
----
-
-## Kapitel 4: Den Mobila Alkemisten 📱🔨
-Att koda på en mobil är en utmaning som SparkCode har löst med briljans.
-
-När du öppnar tangentbordet ser du **Mobile Symbols Bar**. Varför finns den? För att vi vet att det är torterande att leta efter måsvingar och semikolon på ett standard-tangentbord. Vi har placerat kodens viktigaste verktyg precis ovanför dina fingertoppar, så att flödet aldrig bryts.
-
-Och när du vill se resultatet av ditt arbete, använder vi **Zen Mode** och **Device Toggle**. Med ett klick kan du förvandla din överblick till en perfekt simulering av en iPhone, en surfplatta eller en desktop-skärm. Det är en rymd där din sajt får leva och andas, oavsett vilken enhet du själv håller i handen.
+### 2.2. Service Worker Lifecycle (sw.js)
+Vår Service Worker är optimerad för transparens och kontroll:
+*   **Skip Waiting / Clients Claim:** Vi tvingar fram omedelbar aktivering av nya SW-versioner för att säkerställa att arkitekten alltid kör den senaste audit-motorn.
+*   **Navigate Interception:** Vi lyssnar på `fetch`-events. Om nätverket sviker vid en navigering, injicerar vi en in-memory HTML-sträng (`SYSTEM_OFFLINE`) som fungerar som en snygg landningssida med återanslutningslogik.
 
 ---
 
-## Kapitel 5: Prestanda-radarn och Tidsresenären 🩺📡
-I sidomenyns topp snurrar **Performance Radar**. Den mäter projektets hälsa på en mekanisk nivå.
-*   **NODES:** Den räknar varje byggsten i din design. Om det blir för många, varnar den dig – för en tung sajt är en långsam sajt.
-*   **CPU & RAM:** Via vår **Command Bridge** kan den se ända in i din dators processor. Den visar hur mycket kraft som krävs för att driva din arkitektur.
+## 3. Realtids-synkronisering: "Ghost Sync" Protokollet ☁️📡
 
-Och skulle du någonsin vilja gå tillbaka, finns **The Time Traveler (Visual Diff)**. Det är en tidsmaskin där du kan se din nuvarande kod ligga sida vid sida med din historiska kod. Allt som är nytt lyser grönt, och allt som är raderat lyser rött. Det är din absoluta trygghet att veta att ingenting någonsin går förlorat.
+För att möjliggöra samarbete och realtids-fjärrstyrning av desktop-filer från en mobil, använder vi ett avancerat synkroniseringslager.
+
+### 3.1. Supabase Realtime & Broadcast Channels
+*   **Broadcast Mode:** För UI-uppdateringar som kräver minimal latens (t.ex. när du skriver på mobilen och vill se det på skärmen direkt) använder vi broadcast-kanaler. Dessa går via WebSockets och triggar inte databas-skrivningar för varje tecken, vilket sparar IOPS.
+*   **Postgres CDC (Change Data Capture):** För permanent lagring lyssnar vi på `postgres_changes`. När en fil sparas, upsertas den i `file_sync`-tabellen med en unik constraint på `user_id, project_name, file_path`.
+
+### 3.2. Mobil Throttling & Wake Lock
+Moderna mobiloperativsystem (iOS/Android) stryper nätverkstrafik för inaktiva flikar. SparkCode bekämpar detta med:
+*   **Heartbeat Puls:** En `heartbeat`-kanal skickar en minimal ping varje sekund. Detta håller pipan öppen mot Supabase.
+*   **Screen Wake Lock API:** Vi anropar `navigator.wakeLock.request('screen')` i mobilt läge. Detta hindrar enheten från att gå i vila och strypa synk-motorn, vilket är avgörande för långa kodningspass i fält.
 
 ---
 
-## Kapitel 6: The Pulse och Backend-revolutionen 🩺⚙️
-Hela systemets puls kan övervakas via **The Pulse (Live Debugger)**. Varje logg, varje litet felmeddelande från din sajt när den körs, strömmar in i din rapport i realtid. Det är som att ha ett stetoskop mot projektets bröstkorg.
+## 4. Den Allvetande Mentorn: AI & Heuristik 🧠🩺
 
-Och nu, i vår senaste fas, har vi nått **Backend Revolution**. SparkCode har lärt sig att förstå maskinens djupaste språk – Java, C++ och Python. Den kan nu se hela vägen ner i maskinrummet och varna om dina backend-filer inte pratar rätt språk med varandra. Detta är slutmålet: att din mobil ska kunna styra de tyngsta servrarna i världen med samma elegans som en enkel webbsida.
+AI-lagret i SparkCode består av fyra samverkande motorer som utför kontinuerlig statisk och dynamisk analys.
+
+### 4.1. Audit Robot (Structural Analysis)
+En dedikerad motor som penetrerar förhandsvisningens DOM:
+*   **DOM Node Throttling:** Vi räknar totala noder (`doc.getElementsByTagName('*').length`). Överstiger detta 500 noder varnar vi för prestandadegradering.
+*   **Visual Overflow Sentinel:** Vi detekterar horisontell scrollning på `body`-nivå genom att kontrastera `scrollWidth` mot `clientWidth`. Detta flaggar omedelbart för bristfällig mobilanpassning.
+*   **Placeholder Heuristics:** En regex-motor som söker efter "lorem ipsum" och ej utbytta bild-adresser (`unsplash.com` etc).
+
+### 4.2. Experience Scoring Algorithm
+Din rang (Junior till Expert) beräknas inte på godtyckliga grunder, utan via en viktad formel:
+*   **Complexity Score:** `Antal Funktioner + (Totalt antal rader / 10)`. 
+*   **Structure Multiplier:** Om projektet innehåller en `/src`-mapp eller separation mellan HTML/CSS/JS, erhålls en bonusfaktor.
+*   **Logic Penalty:** Avsaknad av variabeldeklarationer eller massiv användning av globala states sänker poängen.
 
 ---
 
-## Epilog: Din Resa Fortsätter
-SparkCode är inte bara ett verktyg; det är en förlängning av din vilja. Varje knapp har skapats för att du ska kunna vara en mästare på din egen arkitektur. Från den minsta lilla inställningen i **KONTOINSTÄLLNINGAR** till den massiva kraften i **GITHUB PUSH**, är allt här för att tjäna dig.
+## 5. Pro Server Bridge: Terminal Integration 🌉⚙️
 
-Nu ligger hela systemet framför dig. Pennan är i din hand, arkitekturen väntar. Skapa något legendariskt. 🏛️💎🏆🔥🦾
+För arkitekter som kör Astro, Vite eller komplexa ramverk lokalt, agerar SparkCode som ett "Control Plane".
+
+### 5.1. Iframe Hijacking & Override
+När du anger en `overrideUrl` i SERVER-menyn, stänger vi av Blob-genereringen och omdirigerar Iframens `src` till din lokala dev-server.
+*   **Security Context:** Eftersom SparkCode körs på HTTPS och lokala sevrrar oftast på HTTP, guidar vi användaren att tillåta "Insecure Content" för att bryggan ska fungera.
+
+### 5.2. Log Proxying (The Pulse)
+För att ge arkitekten insyn i sin lokala server, injicerar vi en proxy i previewsidan:
+```javascript
+const originalLog = console.log;
+console.log = (...args) => {
+  window.parent.postMessage({ type: 'SPARKCODE_LOG', content: args.join(' ') }, '*');
+  originalLog.apply(console, args);
+};
+```
+Detta mönster replikeras för `warn` och `error`, och matas direkt in i SparkCodes centrala terminal.
+
+---
+
+## 6. Persistens & Dataintegritet: SparkCodeDB 🛡️💾
+
+Vi använder en multi-layer lagringsstrategi för att garantera att ingen kod går förlorad.
+
+*   **Layer 1: RAM (Active State):** React-states för omedelbar respons.
+*   **Layer 2: LocalStorage (Backup):** En "flicker-free" kopia av den aktiva filen som används vid hård omladdning (F5).
+*   **Layer 3: IndexedDB (Registry):** Sparar `FileSystemHandles` för att bibehålla disk-access mellan dagar.
+*   **Layer 4: Cloud (Remote):** Den ultimata sanningen för multi-device workflow.
+
+---
+
+**SparkCode är byggt för att vara det mest stabila och intelligenta verktyget i en modern utvecklares arsenal. Varje komponent är optimerad för prestanda, förutsägbarhet och arkitektonisk elegans.** 🏛️💎🏆🔥🦾
